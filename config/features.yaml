@@ -1,0 +1,82 @@
+# Orion Stack feature flags and limits.
+# Edit this file to turn modules on/off without touching openclaw.json.
+
+features:
+  rag: true
+  langgraph_multiagent: true
+  local_mysql: true
+  incidents: true
+  # Incident automation (cron: install-incident-cron.sh). Manual CLI always works when incidents: true.
+  incidents_poll: false       # false = cron poll is a no-op (no MCP fetch, notify, or auto-fix)
+  incidents_notify: false     # false = no BlueBubbles/iMessage alerts on new failures
+  auto_fix_incidents: false   # false = do not auto-run orion-fix on poll
+  auto_push_orion: true
+  auto_pr: true
+  local_web: true
+  watchdog: true
+  watchdog_notify: true
+  watchdog_auto_fix: false
+
+models:
+  planner: claude-opus-4-6
+  coder: claude-sonnet-4-6
+  triage: claude-sonnet-4-6
+
+limits:
+  max_review_iterations: 3
+  subprocess_timeout_s: 120
+  max_diff_insertions: 50
+  max_diff_deletions: 20
+  coder_max_file_context_chars: 8000
+  coder_max_total_context_chars: 40000
+  forbidden_path_patterns:
+    - '\\.env$'
+    - '/\\.github/'
+  rag_chunk_size: 1200
+  rag_chunk_overlap: 200
+  rag_top_k: 8
+  rag_bm25_top_k: 24
+  eval_recall_threshold: 0.7
+
+rag:
+  collections:
+    repos: orion_repos
+    docs: orion_docs
+    sql: orion_sql
+    playbooks: orion_playbooks
+    discrepancies: orion_discrepancies
+  hybrid: false
+  hybrid_vector_weight: 0.7
+  incremental: true
+  index_playbooks_on_fix: true
+  readme_boost: 1.35
+  discrepancy_boost: 1.25
+  scan_discrepancies_on_index: true
+  exclude:
+    - node_modules
+    - vendor
+    - libraries
+    - OUTPUT
+    - .git
+    - dist
+    - build
+    - scripts/test
+    - __pycache__
+    - .venv
+
+langsmith:
+  enabled: true
+  project: orion-rag
+  trace_index: true
+  trace_retrieve: true
+  trace_eval: true
+  upload_eval: false
+
+paths:
+  workspace: ~/.openclaw/workspace
+  repos: ~/.openclaw/workspace/REPOS
+  plans: ~/.openclaw/workspace/plans
+  scripts: ~/.openclaw/workspace/scripts
+  tests: ~/.openclaw/workspace/tests
+  # overlay_root: ~/path/to/your/overlay   # override ORION_OVERLAY_ROOT env var
+  # git_bin: /path/to/git                  # override GIT env var

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+STACK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export ORT_LOG_LEVEL="${ORT_LOG_LEVEL:-3}"
+exec "$STACK_ROOT/.venv/bin/python" "$STACK_ROOT/rag/eval.py" "$@"

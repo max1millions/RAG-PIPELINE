@@ -1,0 +1,18 @@
+# Per-REPOS test commands run by orion-fix / orion-golden-test after code changes.
+#
+# Copy to your overlay: $ORION_OVERLAY_ROOT/config/repo_tests.yaml
+# and add commands for each repository you want tested.
+#
+# ${STACK_ROOT} is expanded to the RAG-PIPELINE root at runtime.
+# Commands run from the repo's root directory (cwd = REPOS/<repo>/).
+
+repos:
+  # EXAMPLE-REPO:
+  #   commands:
+  #     - "python3 -m pytest tests/ -q"
+  #     - "${STACK_ROOT}/bin/orion-golden-test --repo EXAMPLE-REPO"
+  #   timeout_s: 300
+
+defaults:
+  on_missing: skip   # skip | fail — what to do when a repo has no test config
+  timeout_s: 120

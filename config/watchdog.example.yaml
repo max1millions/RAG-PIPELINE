@@ -1,0 +1,40 @@
+# Watchdog SQL validation checks.
+#
+# Copy to your overlay: $ORION_OVERLAY_ROOT/config/watchdog.yaml
+# and add your production-specific checks.
+#
+# Each check runs a SQL file from your REPOS directory against the local
+# MySQL database. The assertion type determines what constitutes a failure:
+#   max_rows   — fails if the query returns more than `threshold` rows
+#   min_rows   — fails if the query returns fewer than `threshold` rows
+#   exact_rows — fails if the row count != `threshold`
+#
+# Per-check auto_fix.enabled is gated by features.watchdog_auto_fix in features.yaml.
+# Refresh your local dump periodically to avoid stale false positives.
+
+checks:
+  - id: example_data_integrity
+    severity: error
+    assertion: max_rows
+    threshold: 0
+    repos_hint: SQL-SCRIPTS
+    sql_file: SQL-SCRIPTS/VALIDATION/YOUR_CHECK.sql
+    sql_statement_index: 0
+    message_template: "Found {metric_value} data integrity violations."
+    auto_fix:
+      enabled: false
+      fix_sql_file: null
+
+  # Add more checks here. Recommended structure:
+  #
+  # - id: unique_descriptive_id
+  #   severity: error | warning | info
+  #   assertion: max_rows | min_rows | exact_rows
+  #   threshold: 0
+  #   repos_hint: SQL-SCRIPTS
+  #   sql_file: SQL-SCRIPTS/VALIDATION/YOUR_CHECK.sql
+  #   sql_statement_index: 0
+  #   message_template: "Found {metric_value} issues."
+  #   auto_fix:
+  #     enabled: false
+  #     fix_sql_file: null

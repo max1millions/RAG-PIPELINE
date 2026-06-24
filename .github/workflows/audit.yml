@@ -1,0 +1,44 @@
+name: Audit — no secrets in tree
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run audit-before-publish.sh
+        run: bash scripts/audit-before-publish.sh
+
+      - name: Verify no SQL dumps
+        run: |
+          if find db/ -name "*.sql" ! -name "provision.sql" | grep -q .; then
+            echo "FAIL: unexpected SQL dumps in db/" >&2
+            exit 1
+          fi
+          echo "OK: db/ contains only provision.sql"
+
+      - name: Verify no RAG artifacts
+        run: |
+          for path in rag/chroma rag/bm25_corpus rag/index_manifest.json; do
+            if [ -e "$path" ]; then
+              echo "FAIL: RAG artifact committed: $path" >&2
+              exit 1
+            fi
+          done
+          echo "OK: no RAG artifacts in tree"
+
+      - name: Verify no data/ runtime files
+        run: |
+          for f in data/incidents/active.json data/incidents/state.json \
+                   data/watchdog/baselines.json data/watchdog/run_history.json; do
+            if [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 10 ]; then
+              echo "FAIL: non-empty runtime data file committed: $f" >&2
+              exit 1
+            fi
+          done
+          echo "OK: no non-empty runtime data files in tree"

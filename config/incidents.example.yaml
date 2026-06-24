@@ -1,0 +1,46 @@
+# Incident supervisor settings.
+#
+# Copy to your overlay: $ORION_OVERLAY_ROOT/config/incidents.yaml
+# and fill in real values.
+#
+# Automation toggles live in config/features.yaml:
+#   features.incidents_poll       — master switch for cron poll (MCP fetch + actions)
+#   features.incidents_notify     — notify on new/reopened incidents
+#   features.auto_fix_incidents   — auto-run orion-fix on poll
+#
+# notify_backend:
+#   log         — print messages to stdout only (safe default; no external service)
+#   bluebubbles — send via OpenClaw + BlueBubbles / iMessage (requires OPENCLAW_TOKEN)
+
+# Notification backend: "log" for stdout-only (no credentials required),
+# "bluebubbles" for iMessage via OpenClaw.
+notify_backend: log
+
+# List of phone numbers or handles to notify (required when notify_backend: bluebubbles).
+# notify_targets:
+#   - "+1XXXXXXXXXX"
+
+poll_limit: 50
+
+# Name of the MCP server to call (must match mcp.servers.<name> in openclaw.json).
+mcp_server: YOUR_MCP_SERVER_NAME
+
+# Name of the MCP tool that returns recent errors (server-specific).
+mcp_tool: get_recent_errors
+
+mcp_timeout_s: 30
+
+dedupe_renotify_every: 10
+dedupe_renotify_hours: 24
+
+# OpenClaw CLI binary name (usually "openclaw").
+openclaw_cli: openclaw
+
+# Notification channel (bluebubbles or sms).
+notify_channel: bluebubbles
+
+# Paths to prepend to PATH when invoking the openclaw CLI subprocess.
+# Needed when Node.js is installed via nvm and the CLI binary is not on the default PATH.
+# openclaw_path_prefix:
+#   - "/home/YOUR_USER/.nvm/versions/node/vXX.XX.X/bin"
+#   - "/home/YOUR_USER/.npm-global/bin"

@@ -1,0 +1,26 @@
+# Local web stack settings for orion-web-test.
+#
+# Copy to your overlay: $ORION_OVERLAY_ROOT/config/web_local.yaml
+# and configure your local nginx/PHP dev stack.
+#
+# docroot is resolved relative to paths.workspace/REPOS/ (from features.yaml).
+# test_subdir is the subdirectory inside <repos_root>/<docroot>/ that contains
+# the npm test suite (must have package.json with "test:unit" script).
+
+base_url: "http://127.0.0.1:8080"
+listen_port: 8080
+
+# Path relative to your REPOS directory (e.g. "my-web-app").
+docroot: "REPOS/YOUR-WEB-APP"
+
+# Subdirectory inside docroot containing the npm test suite.
+# test_subdir: "scripts/test"
+
+nginx_site_name: orion-local
+
+# Ubuntu/Debian defaults; override if your PHP-FPM socket differs.
+php_fpm_socket: "/run/php/php8.3-fpm.sock"
+php_fpm_service: "php8.3-fpm"
+
+health_paths:
+  - "/"

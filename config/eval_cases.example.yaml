@@ -1,0 +1,25 @@
+# RAG recall evaluation cases.
+#
+# Copy to your overlay: $ORION_OVERLAY_ROOT/config/eval_cases.yaml
+# and add queries targeting your indexed repositories.
+#
+# Each case must be findable in the Chroma index after running orion-rag-index.
+# expect_path_contains: a substring expected in at least one hit's file path or text.
+
+- id: readme_layout
+  query: repository layout structure overview
+  expect_path_contains: README
+  intent: general
+
+- id: sql_validation
+  query: data validation SQL script
+  expect_path_contains: VALIDATION
+  collections: [sql]
+  intent: general
+
+# Add more cases for your specific repos:
+#
+# - id: my_repo_entry
+#   query: my repo entry point main script
+#   expect_path_contains: MY-REPO
+#   repo: MY-REPO

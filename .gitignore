@@ -1,0 +1,49 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Secrets / env
+.env
+*.env
+!*.env.example
+.DS_Store
+*.DS_Store
+
+# Private overlay configs (if ever placed in-repo instead of ORION_OVERLAY_ROOT)
+config/local/
+config/*.local.yaml
+config/incidents.yaml
+config/path_map.yaml
+config/watchdog.yaml
+config/repo_tests.yaml
+config/web_local.yaml
+
+# Generated RAG artifacts (live in overlay — never in public tree)
+rag/chroma/
+rag/bm25_corpus/
+rag/index_manifest.json
+
+# Runtime data (live in overlay — never in public tree)
+data/incidents/active.json
+data/incidents/state.json
+data/watchdog/baselines.json
+data/watchdog/run_history.json
+plans/
+
+# DB dumps (keep schema only — dumps live in overlay db/dumps/)
+db/*.sql
+!db/provision.sql
+*.dump
+
+# Web
+web/node_modules/
+
+# Golden CWR fixture samples
+fixtures/golden/**/*.V21
+fixtures/golden/**/*.v21
+fixtures/golden/cwr/

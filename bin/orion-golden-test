@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+STACK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$STACK_ROOT/.venv/bin/python" "$STACK_ROOT/golden/runner.py" "$@"

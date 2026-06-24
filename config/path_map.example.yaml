@@ -1,0 +1,17 @@
+# Production path mapping for incident routing.
+#
+# Copy to your overlay: $ORION_OVERLAY_ROOT/config/path_map.yaml
+# and fill in your production REPOS root and module names.
+#
+# production_root: the absolute path to the REPOS directory on the production
+#   host (Mac, CI, or wherever your pipelines run). Stack traces contain this
+#   prefix; Orion strips it to derive a local repos_name for checkout/context.
+#
+# modules: map each production module name to its local repos_name (the
+#   subdirectory under ~/.openclaw/workspace/REPOS/).
+
+production_root: /path/to/production/REPOS
+
+modules:
+  # EXAMPLE-MODULE:
+  #   repos_name: EXAMPLE-MODULE

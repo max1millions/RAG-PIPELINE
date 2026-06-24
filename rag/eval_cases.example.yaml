@@ -1,0 +1,60 @@
+# RAG eval cases — expect_path_contains matched against hit paths + snippet text.
+
+- id: cwr_entry
+  query: CWR generator entry point main script
+  expect_path_contains: CWR-INTERFACE
+  repo: CWR-INTERFACE
+
+- id: cwr_readme_layout
+  query: how is the CWR repository organized layout structure
+  expect_path_contains: CWR-INTERFACE
+  repo: CWR-INTERFACE
+  intent: general
+
+- id: cis_net_readme
+  query: how to run CIS-Net pipeline prerequisites
+  expect_path_contains: CIS-NET-AUTOMATION
+  intent: general
+
+- id: muso_api_readme
+  query: MUSO API setup configuration
+  expect_path_contains: MUSO-API
+  intent: general
+
+- id: sql_duplicates
+  query: find duplicate writers SQL script
+  expect_path_contains: FIND_DUPLICATE
+  collections: [sql]
+  intent: general
+
+- id: sql_schema
+  query: database schema migration SQL
+  expect_path_contains: SQL-SCRIPTS
+  collections: [sql]
+
+- id: rightstune
+  query: rightstune web application structure
+  expect_path_contains: rightstune
+
+- id: database_scripts
+  query: DATABASE scripts mysql connection
+  expect_path_contains: DATABASE
+
+- id: iswc
+  query: ISWC registration workflow
+  expect_path_contains: ISWC
+
+- id: discrepancy_env
+  query: README env example inconsistent mismatch configuration drift
+  expect_path_contains: discrepancy
+  intent: discrepancy
+
+- id: discrepancy_readme_path
+  query: README references file missing does not exist
+  intent: discrepancy
+  expect_path_contains: README
+
+- id: path_map_module
+  query: path_map module repos_name missing
+  intent: discrepancy
+  collections: [discrepancies]

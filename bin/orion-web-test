@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+STACK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$STACK_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+exec "$STACK_ROOT/.venv/bin/python" -m web.local "$@"

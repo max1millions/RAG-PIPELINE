@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+STACK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$HOME/.openclaw/bin:$PATH"
+exec "$STACK_ROOT/.venv/bin/python" "$STACK_ROOT/codeflow/run.py" "$@"
