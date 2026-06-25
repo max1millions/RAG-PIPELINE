@@ -20,13 +20,13 @@ RAG pipeline module for **Orion**, the OpenClaw agent that operates the [RightsT
 
 RightsTune runs a large set of Python, PHP, and SQL pipelines that handle music publishing administration — registering works with societies worldwide, generating **CWR** (Common Works Registration) files, reconciling **ISWC** and **IPI** identifiers via the ISWC Resolution Service and IPI Context API, ingesting royalty statements, validating catalog data, operating the client portal at rightstune.com, & much more.
 
-**Orion** is the OpenClaw agent that I can talk to via iMessage that runs and maintains those pipelines. It uses custom built MCP tools to call production code, and delegates code edits to `**orion-fix`**, a subprocess that calls **Claude** (Sonnet/Opus via LangGraph). Opus creates the plan documents, then Sonnet actually implements the changes.
+**Orion** is the OpenClaw agent that I can talk to via iMessage that runs and maintains those pipelines. It uses custom built MCP tools to call production code, and delegates code edits to `**orion-fix`**, a subprocess that runs the LangGraph code-change workflow with Claude (Opus planner, Sonnet coder). Opus writes plan documents; Sonnet implements the edits.
 
 Orion uses this **RAG pipeline** to pull small, relevant chunks from a local Chroma index instead of loading whole repos into model context. Indexing and search are local (embeddings only, no LLM on the retrieval path). This is so Orion can understand the codebase well enough to provide context to Claude when making code changes autonomously.
 
 **In short:** this module gives Orion a searchable memory of the entire RightsTune source code, READMEs, SQL scripts, docs, etc. so it can answer questions and ship fixes grounded in how the system actually works. Orion pushes code changes to a separate branch in each repo so I can review and merge via human-in-the-loop protocols (HITL).
 
-Orion uses RAG in two ways: `**orion-rag-query**` for exploration and answers, and `**orion-fix**` which injects RAG context into the LangGraph code-change workflow.
+Orion uses RAG in two ways: `**orion-rag-query`** for exploration and answers, and `**orion-fix`** which injects RAG context into the LangGraph code-change workflow.
 
 ## Architecture
 
@@ -55,16 +55,14 @@ When Orion runs Python code locally to run backtests in any repository when modi
 
 Default production execution only uses **MCP** `rightstune` on the Mac when I make natural language commands (e.g. "Download and process acknowledgements"). The proxy credentials are for optional local runs for testing by the agent without copying secrets to Linux. When I say something like "Let's modify the code..." Orion routes requests through the RAG pipeline (and ultimately delegates code changes to Claude subagents).
 
-## Private overlay (secrets & production data)
+## LangChain & LangGraph
 
-Production secrets, SQL dumps, RAG indexes, and operator-specific configs live **outside this repo** in a private overlay. The public tree ships framework code and `*.example.yaml` **illustrations** of that overlay’s shape — not configs meant for third parties to copy into their own stacks.
+- **LangGraph** and **LangChain** (`ChatAnthropic`) — code changes only (`codeflow/`). RAG retrieval does not use LangChain retrievers or LangGraph; it calls Chroma and BM25 (Best Matching 25) directly, with no LLM on the query path.
+- **LangSmith** — optional tracing on the RAG path too (`@traceable_rag` on index/retrieve/eval in `common/tracing.py`); codeflow also traces when env vars are set.
 
+Entry: `bin/orion-fix` (RAG + DB + incidents) and `bin/orion-code` (same graph, simpler CLI). Requires `ANTHROPIC_API_KEY`.
 
-| Layer               | Location                                                          | Contains                                                                         |
-| ------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| **Public repo**     | `RAG-PIPELINE/`                                                   | Framework code, example configs, synthetic fixtures, `db/provision.sql`          |
-| **Private overlay** | `$ORION_OVERLAY_ROOT` (default `~/.openclaw/local/rag-pipeline/`) | `.env`, incidents/watchdog configs, SQL dumps, Chroma/BM25 indexes, runtime JSON |
-
+Details: [ARCHITECTURE.md](./docs/ARCHITECTURE.md) · [DECISIONS.md](./docs/DECISIONS.md) §4.
 
 ## RAG reference
 
@@ -98,6 +96,17 @@ Indexes `REPOS/` into Chroma (`$ORION_OVERLAY_ROOT/rag/chroma/` when overlay is 
 ```
 
 Intents: `general` (default), `discrepancy`, `incident`. Optional `--hybrid` for BM25+vector fusion. Python API: `rag.retrieve.retrieve()`.
+
+## Private overlay (secrets & production data)
+
+Production secrets, SQL dumps, RAG indexes, and operator-specific configs live **outside this repo** in a private overlay. The public tree ships framework code and `*.example.yaml` **illustrations** of that overlay’s shape — not configs meant for third parties to copy into their own stacks.
+
+
+| Layer               | Location                                                          | Contains                                                                         |
+| ------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Public repo**     | `RAG-PIPELINE/`                                                   | Framework code, example configs, synthetic fixtures, `db/provision.sql`          |
+| **Private overlay** | `$ORION_OVERLAY_ROOT` (default `~/.openclaw/local/rag-pipeline/`) | `.env`, incidents/watchdog configs, SQL dumps, Chroma/BM25 indexes, runtime JSON |
+
 
 ## Modules
 
