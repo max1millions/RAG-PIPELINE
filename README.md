@@ -7,13 +7,13 @@ RAG pipeline module for **Orion**, the OpenClaw agent that operates the [RightsT
 ## Documentation
 
 
-| Doc                                                          | Contents                                            |
-| ------------------------------------------------------------ | --------------------------------------------------- |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)               | System overview and diagrams                        |
-| [docs/DECISIONS.md](./docs/DECISIONS.md)                     | Design rationale (overlay, RAG, codeflow, security) |
-| [docs/EXAMPLES-rightstune.md](./docs/EXAMPLES-rightstune.md) | RightsTune deployment context (portfolio)           |
-| [docs/CONFIG.md](./docs/CONFIG.md)                           | Config merge order and file map                     |
-| [docs/Deep Research Reports/](./docs/Deep%20Research%20Reports/) | Architecture research behind agentic ops & testing |
+| Doc                                                              | Contents                                            |
+| ---------------------------------------------------------------- | --------------------------------------------------- |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)                   | System overview and diagrams                        |
+| [docs/DECISIONS.md](./docs/DECISIONS.md)                         | Design rationale (overlay, RAG, codeflow, security) |
+| [docs/EXAMPLES-rightstune.md](./docs/EXAMPLES-rightstune.md)     | RightsTune deployment context (portfolio)           |
+| [docs/CONFIG.md](./docs/CONFIG.md)                               | Config merge order and file map                     |
+| [docs/Deep Research Reports/](./docs/Deep%20Research%20Reports/) | Architecture research behind agentic ops & testing  |
 
 
 ## What this is
@@ -47,13 +47,13 @@ iMessage → Orion
   └─ Fix REPOS code ────► orion-rag-query → orion-fix → Claude + RAG chunks
 ```
 
-Orion also supports multimodal iMessage (photos, voice memos), self-healing automated alerts from `orion-incident` / `orion-watchdog` — autonomous agent loops for production failures and local SQL anomalies.
+Orion also supports multimodal iMessage (photos, voice memos), self-healing automated alerts from `orion-incident` / `orion-watchdog` — *autonomous agent loops* for production failures and local SQL anomalies.
 
 ### Local proxy `.env` (Linux)
 
 When Orion runs Python code locally to run backtests in any repository when modifying code, the openclaw agent cannot read secure credentials to enforce the principle of least privilege. It can only read dummy variables injected by proxy scripts.
 
-Default production execution only uses **MCP** `rightstune` on the Mac when you make natural language commands (e.g. "Download and process acknowledgements"). The proxy credentials are for optional local runs for testing by the agent without copying secrets to Linux. When you say something like "Let's modify the code..." Orion routes requests through the RAG pipeline (and ultimately delegates code changes to Claude subagents).
+Default production execution only uses **MCP** `rightstune` on the Mac when I make natural language commands (e.g. "Download and process acknowledgements"). The proxy credentials are for optional local runs for testing by the agent without copying secrets to Linux. When I say something like "Let's modify the code..." Orion routes requests through the RAG pipeline (and ultimately delegates code changes to Claude subagents).
 
 ## Private overlay (secrets & production data)
 
@@ -113,25 +113,25 @@ Intents: `general` (default), `discrepancy`, `incident`. Optional `--hybrid` for
 | Local web               | `features.local_web`            | `bin/orion-web-test`                                               |
 
 
-## Setup
-
-See **[SETUP.md](./SETUP.md)** — venv, overlay secrets, MySQL, first index, smoke tests, incident/watchdog cron.
-
-Quick public smoke (no MySQL or REPOS required):
+## Setup (portfolio / CI)
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ./scripts/smoke-public.sh
 ```
 
+No MySQL, REPOS, or overlay required. Operator runbooks (overlay, MySQL, MCP, cron) live in the private `$ORION_OVERLAY_ROOT/OPS.md`, not in this repo.
+
+Before publishing: `./scripts/audit-before-publish.sh` (must exit 0).
+
 ## Configuration
 
 
-| File                    | Purpose                                                             |
-| ----------------------- | ------------------------------------------------------------------- |
-| `config/features.yaml`  | Feature flags, RAG limits, Claude model names                       |
-| `config/.env.example`   | Template for secrets — copy to `$ORION_OVERLAY_ROOT/config/.env`    |
-| `config/*.example.yaml` | Templates for incidents, watchdog, path_map, etc. (copy to overlay) |
+| File                    | Purpose                                                         |
+| ----------------------- | --------------------------------------------------------------- |
+| `config/features.yaml`  | Feature flags, RAG limits, Claude model names                   |
+| `config/.env.example`   | Illustrative secrets shape (live copy in private overlay)       |
+| `config/*.example.yaml` | Illustrative incidents, watchdog, path_map, etc. (overlay only) |
 
 
 Key flags: `features.rag`, `rag.hybrid`, `rag.incremental`, `limits.rag_top_k`, `limits.eval_recall_threshold`. Paths: `paths.repos` → `~/.openclaw/workspace/REPOS`.

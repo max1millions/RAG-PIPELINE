@@ -43,5 +43,4 @@ Cron/boot scripts under `~/.openclaw/workspace/scripts/` should export `ORION_OV
 
 ## Related
 
-- [SETUP.md](../SETUP.md)
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
