@@ -26,7 +26,7 @@ Orion uses this **RAG pipeline** to pull small, relevant chunks from a local Chr
 
 **In short:** this module gives Orion a searchable memory of the entire RightsTune source code, READMEs, SQL scripts, docs, etc. so it can answer questions and ship fixes grounded in how the system actually works. Orion pushes code changes to a separate branch in each repo so I can review and merge via human-in-the-loop protocols (HITL).
 
-Orion uses RAG in two ways: `**orion-rag-query`** for exploration and answers, and `**orion-fix`** which injects RAG context into the LangGraph code-change workflow.
+Orion uses RAG in two ways: `**orion-rag-query**` for exploration and answers, and `**orion-fix**` which injects RAG context into the LangGraph code-change workflow.
 
 ## Architecture
 
@@ -112,17 +112,6 @@ Intents: `general` (default), `discrepancy`, `incident`. Optional `--hybrid` for
 | Golden fixtures         | (manifest)                      | `bin/orion-golden-test`                                            |
 | Local web               | `features.local_web`            | `bin/orion-web-test`                                               |
 
-
-## Setup (portfolio / CI)
-
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-./scripts/smoke-public.sh
-```
-
-No MySQL, REPOS, or overlay required. Operator runbooks (overlay, MySQL, MCP, cron) live in the private `$ORION_OVERLAY_ROOT/OPS.md`, not in this repo.
-
-Before publishing: `./scripts/audit-before-publish.sh` (must exit 0).
 
 ## Configuration
 
