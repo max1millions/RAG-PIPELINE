@@ -1,7 +1,6 @@
 # Incident supervisor settings.
 #
-# Copy to your overlay: $ORION_OVERLAY_ROOT/config/incidents.yaml
-# and fill in real values.
+# I load incident settings from $ORION_OVERLAY_ROOT/config/incidents.yaml when present.
 #
 # Automation toggles live in config/features.yaml:
 #   features.incidents_poll       — master switch for cron poll (MCP fetch + actions)

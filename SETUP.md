@@ -17,11 +17,11 @@ python3 -m venv .venv
 All secrets and production configs live outside the repo in a private overlay.
 
 ```bash
-# Create overlay directory
+# Overlay root and config dir
 export ORION_OVERLAY_ROOT=~/.openclaw/local/rag-pipeline
 mkdir -p "$ORION_OVERLAY_ROOT/config"
 
-# Copy and fill in each example config
+# Seed overlay from example configs
 cp config/.env.example          "$ORION_OVERLAY_ROOT/config/.env"
 cp config/incidents.example.yaml "$ORION_OVERLAY_ROOT/config/incidents.yaml"
 cp config/path_map.example.yaml  "$ORION_OVERLAY_ROOT/config/path_map.yaml"
@@ -29,7 +29,7 @@ cp config/watchdog.example.yaml  "$ORION_OVERLAY_ROOT/config/watchdog.yaml"
 cp config/repo_tests.example.yaml "$ORION_OVERLAY_ROOT/config/repo_tests.yaml"
 cp config/web_local.example.yaml "$ORION_OVERLAY_ROOT/config/web_local.yaml"
 
-# Edit overlay .env — set ANTHROPIC_API_KEY and MYSQL_PASSWORD
+# Overlay .env (ANTHROPIC_API_KEY, MYSQL_PASSWORD)
 $EDITOR "$ORION_OVERLAY_ROOT/config/.env"
 ```
 

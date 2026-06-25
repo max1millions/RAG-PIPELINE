@@ -2,8 +2,7 @@
 # Pre-publish audit: scans the public repo tree for proprietary data.
 # Exit 1 if any hit is found; exit 0 if clean.
 #
-# Run before any git add / push:
-#   ./scripts/audit-before-publish.sh
+# Pre-publication scan; invoked as ./scripts/audit-before-publish.sh before git add/push.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

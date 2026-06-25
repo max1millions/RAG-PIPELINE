@@ -1,0 +1,47 @@
+# Configuration Reference
+
+How configuration is loaded and merged. Background: [DECISIONS.md §1](./DECISIONS.md#1-public-framework--private-overlay).
+
+## Merge order
+
+1. Public `config/{name}.example.yaml` (or live `{name}.yaml` if present)
+2. Overlay `$ORION_OVERLAY_ROOT/config/{name}.yaml` — deep-merge, overlay wins
+3. `.env`: overlay first, then repo; `load_dotenv(override=False)`
+
+`features.yaml` merges the same way via `common/config.py`.
+
+## Config file map
+
+| Public template | Overlay path | Consumer |
+|-----------------|--------------|----------|
+| `config/features.yaml` | `config/features.yaml` | All modules |
+| `config/.env.example` | `config/.env` | Secrets, MySQL |
+| `config/incidents.example.yaml` | `config/incidents.yaml` | Incidents, notify |
+| `config/path_map.example.yaml` | `config/path_map.yaml` | MCP ingest |
+| `config/watchdog.example.yaml` | `config/watchdog.yaml` | SQL checks |
+| `config/repo_tests.example.yaml` | `config/repo_tests.yaml` | orion-fix tests |
+| `config/web_local.example.yaml` | `config/web_local.yaml` | orion-web-test |
+| `rag/eval_cases.example.yaml` | `config/eval_cases.yaml` | orion-rag-eval |
+
+`config/eval_cases.example.yaml` is a generic pointer only — `rag/eval.py` loads from `rag/eval_cases.example.yaml` when no overlay file exists.
+
+## Environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `ORION_OVERLAY_ROOT` | Overlay directory |
+| `ORION_RAG_HYBRID` | Force BM25+vector hybrid |
+| `ANTHROPIC_API_KEY` | Claude (overlay `.env`) |
+| `MYSQL_*` | Local MySQL |
+| `OPENCLAW_TOKEN` | iMessage notify (cron) |
+
+`repo_tests.yaml` supports `${STACK_ROOT}` for portable test command paths.
+
+## Operator scripts (not in this repo)
+
+Cron/boot scripts under `~/.openclaw/workspace/scripts/` should export `ORION_OVERLAY_ROOT`, source overlay `.env`, and preserve env when calling `bin/orion-*`. Details in overlay `OPS.md`.
+
+## Related
+
+- [SETUP.md](../SETUP.md)
+- [ARCHITECTURE.md](./ARCHITECTURE.md)

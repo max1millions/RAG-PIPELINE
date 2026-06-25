@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Load a SQL dump into the local orion database.
 #
-# Dumps live in your overlay:  $ORION_OVERLAY_ROOT/db/dumps/
+# I expect dumps under $ORION_OVERLAY_ROOT/db/dumps/ when importing from overlay.
 #
 # From file:
 #   ./db/import_dump.sh /path/to/dump.sql
@@ -22,7 +22,7 @@ fi
 
 usage() {
   echo "Usage: $0 /path/to/dump.sql | - | --stdin" >&2
-  echo "  Dumps are typically stored in: \$ORION_OVERLAY_ROOT/db/dumps/" >&2
+  echo "  Typical dump location: \$ORION_OVERLAY_ROOT/db/dumps/" >&2
   exit 1
 }
 

@@ -1,5 +1,5 @@
 # Orion Stack feature flags and limits.
-# Edit this file to turn modules on/off without touching openclaw.json.
+# Feature flags and limits; I read these to enable or disable modules without openclaw.json changes.
 
 features:
   rag: true
@@ -78,5 +78,5 @@ paths:
   plans: ~/.openclaw/workspace/plans
   scripts: ~/.openclaw/workspace/scripts
   tests: ~/.openclaw/workspace/tests
-  # overlay_root: ~/path/to/your/overlay   # override ORION_OVERLAY_ROOT env var
+  # overlay_root: ~/path/to/overlay   # overrides ORION_OVERLAY_ROOT env var when set
   # git_bin: /path/to/git                  # override GIT env var

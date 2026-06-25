@@ -21,8 +21,8 @@ def load_web_local() -> dict[str, Any]:
     data = load_layered_config("web_local")
     if not data:
         raise FileNotFoundError(
-            "Missing web_local config. Copy config/web_local.example.yaml to your overlay "
-            "(ORION_OVERLAY_ROOT/config/web_local.yaml) and configure docroot."
+            "Missing web_local config. I expect ORION_OVERLAY_ROOT/config/web_local.yaml "
+            "(see config/web_local.example.yaml) with docroot set."
         )
     return data
 
@@ -72,7 +72,7 @@ def ensure_stack_running() -> None:
         raise RuntimeError(
             f"boot_local.sh start failed (exit {start.returncode}):\n"
             f"{start.stdout}\n{start.stderr}\n"
-            "Run install-nginx once: ~/.openclaw/workspace/scripts/boot_local.sh install-nginx"
+            "Local nginx not installed; boot_local.sh install-nginx is required first."
         )
 
 

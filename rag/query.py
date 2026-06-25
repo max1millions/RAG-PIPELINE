@@ -65,7 +65,7 @@ def main() -> int:
     require_feature("rag", "RAG")
 
     if not CHROMA_DIR.exists():
-        print(f"ERROR: Chroma store missing at {CHROMA_DIR}. Run bin/orion-rag-index first.", file=sys.stderr)
+        print(f"ERROR: Chroma store missing at {CHROMA_DIR}; I need an index from orion-rag-index.", file=sys.stderr)
         return 1
 
     cols = tuple(args.collections) if args.collections else None

@@ -104,6 +104,6 @@ def anthropic_api_key() -> str:
     key = get_env("ANTHROPIC_API_KEY")
     if not key or key.startswith("sk-ant-api03-REPLACE"):
         raise RuntimeError(
-            f"ANTHROPIC_API_KEY is missing or placeholder. Set it in {ENV_PATH}"
+            f"ANTHROPIC_API_KEY is missing or placeholder in {ENV_PATH}"
         )
     return key

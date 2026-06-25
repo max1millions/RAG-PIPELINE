@@ -1,17 +1,15 @@
--- Run once as MySQL root after installing mysql-server:
---   sudo mysql < ~/.openclaw/workspace/RAG-PIPELINE/db/provision.sql
+-- One-time MySQL root provisioning (e.g. sudo mysql < .../db/provision.sql).
 --
--- The database name (orion_app) must match MYSQL_DATABASE in your overlay .env.
--- To use a different name, replace orion_app below and update MYSQL_DATABASE.
+-- Database name (orion_app) should match MYSQL_DATABASE in overlay .env.
+-- To use a different name, change orion_app here and in MYSQL_DATABASE.
 --
--- Then set the same password in ORION_OVERLAY_ROOT/config/.env (MYSQL_PASSWORD).
+-- MYSQL_PASSWORD in ORION_OVERLAY_ROOT/config/.env should match the user password below.
 
 CREATE DATABASE IF NOT EXISTS orion_app
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
--- Replace CHANGE_ME_ORION_LOCAL with your chosen password before running,
--- or run interactively and substitute.
+-- Default password placeholder CHANGE_ME_ORION_LOCAL; must match MYSQL_PASSWORD in overlay .env.
 CREATE USER IF NOT EXISTS 'orion'@'localhost' IDENTIFIED BY 'CHANGE_ME_ORION_LOCAL';
 CREATE USER IF NOT EXISTS 'orion'@'127.0.0.1' IDENTIFIED BY 'CHANGE_ME_ORION_LOCAL';
 

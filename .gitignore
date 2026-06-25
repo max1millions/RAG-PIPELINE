@@ -14,7 +14,7 @@ __pycache__/
 .DS_Store
 *.DS_Store
 
-# Private overlay configs (if ever placed in-repo instead of ORION_OVERLAY_ROOT)
+# Private overlay configs
 config/local/
 config/*.local.yaml
 config/incidents.yaml

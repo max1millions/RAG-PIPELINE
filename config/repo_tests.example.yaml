@@ -1,7 +1,6 @@
 # Per-REPOS test commands run by orion-fix / orion-golden-test after code changes.
 #
-# Copy to your overlay: $ORION_OVERLAY_ROOT/config/repo_tests.yaml
-# and add commands for each repository you want tested.
+# I load per-repo test commands from $ORION_OVERLAY_ROOT/config/repo_tests.yaml when present.
 #
 # ${STACK_ROOT} is expanded to the RAG-PIPELINE root at runtime.
 # Commands run from the repo's root directory (cwd = REPOS/<repo>/).

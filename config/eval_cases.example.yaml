@@ -1,7 +1,12 @@
 # RAG recall evaluation cases.
 #
-# Copy to your overlay: $ORION_OVERLAY_ROOT/config/eval_cases.yaml
-# and add queries targeting your indexed repositories.
+# NOTE: This file is a generic template for documentation only.
+# The eval harness (rag/eval.py) loads cases from:
+#   1. $ORION_OVERLAY_ROOT/config/eval_cases.yaml  (operator)
+#   2. rag/eval_cases.yaml                         (in-repo live)
+#   3. rag/eval_cases.example.yaml                 (RightsTune reference cases)
+#
+# I load eval cases from overlay first; rag/eval_cases.example.yaml has reference deployment cases.
 #
 # Each case must be findable in the Chroma index after running orion-rag-index.
 # expect_path_contains: a substring expected in at least one hit's file path or text.
@@ -17,7 +22,7 @@
   collections: [sql]
   intent: general
 
-# Add more cases for your specific repos:
+# Example cases for additional repos:
 #
 # - id: my_repo_entry
 #   query: my repo entry point main script

@@ -63,7 +63,7 @@ def normalize_mac_row(row: dict[str, Any]) -> dict[str, Any]:
     if not production_root:
         raise ValueError(
             "path_map.production_root is not set. "
-            "Configure it in your overlay: ORION_OVERLAY_ROOT/config/path_map.yaml"
+            "Set production_root in ORION_OVERLAY_ROOT/config/path_map.yaml."
         )
     modules = path_map.get("modules") or {}
 

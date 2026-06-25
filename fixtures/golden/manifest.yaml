@@ -1,10 +1,8 @@
 # Public synthetic golden fixture cases.
 # These run without any private REPOS or production database.
 #
-# For operator-specific cases (real SQL tables, production repos),
-# copy this file to your overlay:
-#   $ORION_OVERLAY_ROOT/fixtures/golden/manifest.yaml
-# and add your cases there.
+# Operator-specific cases (real SQL tables, production repos) load from
+# $ORION_OVERLAY_ROOT/fixtures/golden/manifest.yaml when present.
 
 cases:
   - id: manifest_loads
@@ -12,7 +10,7 @@ cases:
     description: Golden manifest and runner import successfully
     repo: RAG-PIPELINE
 
-  # Add SQL cases once you have a local database with data:
+  # Example SQL cases (require local MySQL with data):
   #
   # - id: example_table_query
   #   kind: sql_scalar
