@@ -25,6 +25,15 @@ How configuration is loaded and merged. Background: [DECISIONS.md §1](./DECISIO
 
 `config/eval_cases.example.yaml` is a generic pointer only — `rag/eval.py` loads from `rag/eval_cases.example.yaml` when no overlay file exists.
 
+## RAG auto-reindex flags
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `rag.index_on_fix` | `true` | Reindex the touched repo after `orion-fix` commits (`codeflow/fix.py`) |
+| `rag.index_on_fix_collections` | `[repos, docs]` | Which collections to reindex on fix — keep small, `sql`/`playbooks`/`discrepancies` rarely change from a code fix |
+
+Post-merge reindexing (after `git pull` in `REPOS/*`) is not a `features.yaml` flag — it is a `post-merge` git hook installed per-repo via `scripts/install-rag-reindex-hook.sh`. See [README.md](../README.md#automatic-reindexing).
+
 ## Environment variables
 
 | Variable | Purpose |

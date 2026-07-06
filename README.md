@@ -132,7 +132,16 @@ Production secrets, SQL dumps, RAG indexes, and operator-specific configs live *
 | `config/*.example.yaml` | Illustrative incidents, watchdog, path_map, etc. (overlay only) |
 
 
-Key flags: `features.rag`, `rag.hybrid`, `rag.incremental`, `limits.rag_top_k`, `limits.eval_recall_threshold`. Paths: `paths.repos` → `~/.openclaw/workspace/REPOS`.
+Key flags: `features.rag`, `rag.hybrid`, `rag.incremental`, `rag.index_on_fix`, `limits.rag_top_k`, `limits.eval_recall_threshold`. Paths: `paths.repos` → `~/.openclaw/workspace/REPOS`.
+
+### Automatic reindexing
+
+The Chroma index is kept fresh without manual `orion-rag-index` runs in two situations:
+
+- **After `orion-fix` commits** — `codeflow/fix.py` incrementally reindexes the touched repo's `rag.index_on_fix_collections` (default `repos`, `docs`) when `rag.index_on_fix: true`. Best-effort — failures never block the fix result.
+- **After `git pull` in `REPOS/*`** — a `post-merge` git hook (installed via `scripts/install-rag-reindex-hook.sh`) runs `orion-rag-index --repo <name> --quiet` in the background for that checkout.
+
+Both reuse the existing incremental manifest (`rag/index_manifest.json`), so only changed files are re-embedded. A full `orion-rag-index --reset --no-incremental` is still the right tool after large restructures or manifest corruption.
 
 Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `bluebubbles` (OpenClaw iMessage).
 
@@ -147,6 +156,7 @@ Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `b
 | Eval fails                  | Re-index with `--reset`, or tune overlay `eval_cases.yaml` |
 | Watchdog false positives    | Refresh local DB: `./db/import_dump.sh ...`                |
 | `ANTHROPIC_API_KEY missing` | Set key in `$ORION_OVERLAY_ROOT/config/.env`               |
+| Reindex hook missing/stale  | Re-run `./scripts/install-rag-reindex-hook.sh`             |
 
 
 ## License

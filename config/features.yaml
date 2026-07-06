@@ -49,6 +49,8 @@ rag:
   hybrid_vector_weight: 0.7
   incremental: true
   index_playbooks_on_fix: true
+  index_on_fix: true
+  index_on_fix_collections: [repos, docs]
   readme_boost: 1.35
   discrepancy_boost: 1.25
   scan_discrepancies_on_index: true

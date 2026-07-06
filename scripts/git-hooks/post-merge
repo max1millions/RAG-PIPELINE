@@ -1,0 +1,18 @@
+#!/bin/sh
+# Installed as .git/hooks/post-merge in each REPOS/* checkout by
+# scripts/install-rag-reindex-hook.sh.
+#
+# Incrementally reindexes this repo's RAG collections after `git pull`
+# brings in new commits. Runs in the background so the pull returns
+# immediately; failures only show up in the log, never block the pull.
+REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
+INDEX_BIN="$HOME/.openclaw/workspace/RAG-PIPELINE/bin/orion-rag-index"
+LOG="$HOME/.openclaw/logs/rag-reindex.log"
+
+[ -x "$INDEX_BIN" ] || exit 0
+
+mkdir -p "$(dirname "$LOG")"
+nohup "$INDEX_BIN" --repo "$REPO_NAME" --quiet >>"$LOG" 2>&1 &
+disown 2>/dev/null || true
+
+exit 0
