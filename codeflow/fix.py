@@ -74,6 +74,28 @@ def _prompt_from_incident(record: dict[str, Any]) -> tuple[str, str, str]:
     return "\n".join(parts), repo, str(record.get("fingerprint") or "")
 
 
+def _maybe_reindex_after_fix(repo: str, final: dict[str, Any]) -> None:
+    """Best-effort incremental reindex of the touched repo after a commit.
+
+    Never raises — a reindex failure must not affect the fix result the
+    caller already has in hand.
+    """
+    if not final.get("commit_sha"):
+        return
+    cfg = load_config()
+    if not cfg.get("features", {}).get("rag"):
+        return
+    if not (cfg.get("rag") or {}).get("index_on_fix", True):
+        return
+    try:
+        from rag.index import index_all
+
+        cols = tuple((cfg.get("rag") or {}).get("index_on_fix_collections") or ["repos", "docs"])
+        index_all(repo_filter=repo, incremental=True, collections=cols, quiet=True)
+    except Exception:
+        pass
+
+
 def _resolve_incident(prefix: str) -> dict[str, Any]:
     active = load_active()
     prefix_lower = prefix.lower()
@@ -139,7 +161,9 @@ def invoke_fix(
         initial["complexity"] = "complex"
 
     graph = build_graph()
-    return graph.invoke(initial)
+    final = graph.invoke(initial)
+    _maybe_reindex_after_fix(repo, final)
+    return final
 
 
 def main() -> int:
