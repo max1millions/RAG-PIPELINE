@@ -13,6 +13,7 @@ sys.path.insert(0, str(STACK_ROOT))
 
 from common.config import require_feature  # noqa: E402
 from db.connect import execute_sql  # noqa: E402
+from db.run_file import run_sql_file  # noqa: E402
 
 
 def main() -> int:
@@ -21,13 +22,33 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run SQL against local rightstune MySQL")
     parser.add_argument("sql", nargs="?", help="SQL statement or query")
     parser.add_argument("--file", "-f", help="Read SQL from file")
-    parser.add_argument("--write", action="store_true", help="Allow write/DDL statements")
-    parser.add_argument("--json", action="store_true", help="JSON output")
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Allow write/DDL statements (inline SQL only; ignored with --file)",
+    )
+    parser.add_argument("--json", action="store_true", help="JSON output (inline SQL only)")
     args = parser.parse_args()
 
     if args.file:
-        sql = Path(args.file).read_text(encoding="utf-8")
-    elif args.sql:
+        # Multi-statement files (SET @vars, multiple SELECTs, transactions)
+        # are shelled out to the mysql CLI instead of a single
+        # cursor.execute() — see db/run_file.py. --write is a no-op here.
+        if args.json:
+            print(
+                "ERROR: --json is not supported with --file; "
+                "use inline SQL for JSON output.",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            proc = run_sql_file(args.file)
+        except FileNotFoundError as exc:
+            print(f"ERROR: file not found: {exc}", file=sys.stderr)
+            return 1
+        return proc.returncode
+
+    if args.sql:
         sql = args.sql
     else:
         sql = sys.stdin.read()
