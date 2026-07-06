@@ -5,11 +5,11 @@ Not a SQL parser or statement splitter. Two modes:
   --glob PATTERN   Smoke-test every matching .sql file: pass/fail is just
                     the mysql exit code (syntax + live-schema check).
   --file PATH      Run one file; optionally --expect-empty to assert no
-                    rows are returned (used for VALIDATION/ scripts).
+                    rows are returned (validation scripts).
 
 Paths are resolved against the workspace root (config paths.workspace), not
-cwd, so `--glob 'REPOS/SQL-SCRIPTS/**/*.sql'` works whether this is invoked
-from the repo root (as codeflow/test_runner.py does) or elsewhere.
+cwd, so glob patterns work whether this is invoked from a repo root (as
+codeflow/test_runner.py does) or elsewhere.
 """
 
 from __future__ import annotations
@@ -70,9 +70,9 @@ def main() -> int:
     require_feature("local_mysql", "Local MySQL")
 
     parser = argparse.ArgumentParser(
-        description="Shell-out SQL test harness for SQL-SCRIPTS (no statement parsing)"
+        description="Shell-out SQL test harness (no statement parsing)"
     )
-    parser.add_argument("--glob", help="Glob pattern relative to workspace root, e.g. 'REPOS/SQL-SCRIPTS/**/*.sql'")
+    parser.add_argument("--glob", help="Glob pattern relative to workspace root, e.g. '**/*.sql'")
     parser.add_argument("--file", help="Single .sql file, relative to workspace root or absolute")
     parser.add_argument(
         "--exclude",
@@ -83,7 +83,7 @@ def main() -> int:
     parser.add_argument(
         "--expect-empty",
         action="store_true",
-        help="Assert the file returns no rows (for VALIDATION/ scripts)",
+        help="Assert the file returns no rows (validation scripts)",
     )
     args = parser.parse_args()
 

@@ -1,11 +1,9 @@
 """Run a (possibly multi-statement) .sql file via the `mysql` CLI.
 
-Mirrors the shell-out pattern already used by db/import_dump.sh and
-REPOS/CIS-NET-AUTOMATION/phase3.py::execute_sql_file: pipe the file straight
-into `mysql` as stdin instead of trying to split/parse statements in Python.
-This is what makes SET @vars, multiple SELECTs, USE, and transactions in
-SQL-SCRIPTS files work correctly. Shared by orion-db (--file) and
-orion-sql-test.
+Mirrors the shell-out pattern already used by db/import_dump.sh: pipe the file
+straight into `mysql` as stdin instead of trying to split/parse statements in
+Python. This is what makes SET @vars, multiple SELECTs, USE, and transactions
+work correctly. Shared by orion-db (--file) and orion-sql-test.
 """
 
 from __future__ import annotations

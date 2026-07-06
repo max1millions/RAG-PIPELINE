@@ -19,7 +19,7 @@ from db.run_file import run_sql_file  # noqa: E402
 def main() -> int:
     require_feature("local_mysql", "Local MySQL")
 
-    parser = argparse.ArgumentParser(description="Run SQL against local rightstune MySQL")
+    parser = argparse.ArgumentParser(description="Run SQL against local MySQL")
     parser.add_argument("sql", nargs="?", help="SQL statement or query")
     parser.add_argument("--file", "-f", help="Read SQL from file")
     parser.add_argument(
