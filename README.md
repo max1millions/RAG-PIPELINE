@@ -136,12 +136,13 @@ Key flags: `features.rag`, `rag.hybrid`, `rag.incremental`, `rag.index_on_fix`, 
 
 ### Automatic reindexing
 
-The Chroma index is kept fresh without manual `orion-rag-index` runs in two situations:
+The Chroma index is kept fresh without manual `orion-rag-index` runs in three situations:
 
 - **After `orion-fix` commits** — `codeflow/fix.py` incrementally reindexes the touched repo's `rag.index_on_fix_collections` (default `repos`, `docs`) when `rag.index_on_fix: true`. Best-effort — failures never block the fix result.
 - **After `git pull` in `REPOS/*`** — a `post-merge` git hook (installed via `scripts/install-rag-reindex-hook.sh`) runs `orion-rag-index --repo <name> --quiet` in the background for that checkout.
+- **After push to `main` (deploy pipeline)** — `deploy-orion-node.yml` calls `~/.openclaw/deploy-scripts/deploy-sync.sh`, which queues the same incremental reindex in the background after rsync + hard reset (no `git pull`, so the post-merge hook does not fire).
 
-Both reuse the existing incremental manifest (`rag/index_manifest.json`), so only changed files are re-embedded. A full `orion-rag-index --reset --no-incremental` is still the right tool after large restructures or manifest corruption.
+All three reuse the existing incremental manifest (`rag/index_manifest.json`), so only changed files are re-embedded. Deploy and hook paths scope to `repos`/`docs` only (`sql` included for `SQL-SCRIPTS`). A full `orion-rag-index --reset --no-incremental` is still the right tool after large restructures or manifest corruption.
 
 Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `bluebubbles` (OpenClaw iMessage).
 

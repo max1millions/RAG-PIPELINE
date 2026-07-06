@@ -32,7 +32,11 @@ How configuration is loaded and merged. Background: [DECISIONS.md §1](./DECISIO
 | `rag.index_on_fix` | `true` | Reindex the touched repo after `orion-fix` commits (`codeflow/fix.py`) |
 | `rag.index_on_fix_collections` | `[repos, docs]` | Which collections to reindex on fix — keep small, `sql`/`playbooks`/`discrepancies` rarely change from a code fix |
 
-Post-merge reindexing (after `git pull` in `REPOS/*`) is not a `features.yaml` flag — it is a `post-merge` git hook installed per-repo via `scripts/install-rag-reindex-hook.sh`. See [README.md](../README.md#automatic-reindexing).
+Post-merge reindexing (after `git pull` in `REPOS/*`) is not a `features.yaml` flag — it is a `post-merge` git hook installed per-repo via `scripts/install-rag-reindex-hook.sh`.
+
+Deploy reindexing (after push to `main` on GitHub) is wired in `~/.openclaw/deploy-scripts/deploy-sync.sh` — called by every `deploy-orion-node.yml` workflow on the self-hosted runner. Best-effort background job; deploy succeeds even if reindex fails.
+
+See [README.md](../README.md#automatic-reindexing).
 
 ## Environment variables
 
