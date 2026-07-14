@@ -54,6 +54,9 @@ class AgentState(TypedDict, total=False):
     error: str
     summary: str
     replan: bool
+    needs_clarification: bool
+    clarifying_questions: list[str]
+    status: str
 
 
 def _read_prompt(name: str) -> str:
@@ -135,26 +138,127 @@ def fetch_rag_node(state: AgentState) -> AgentState:
     return {**state, "rag_context": context}
 
 
+def _parse_clarification(raw: str) -> dict[str, Any] | None:
+    """Return clarification payload if planner asked questions; else None."""
+    parsed = _extract_json(raw)
+    if parsed.get("error") or parsed.get("status") != "needs_clarification":
+        return None
+    questions = parsed.get("questions") or []
+    if isinstance(questions, str):
+        questions = [questions]
+    cleaned = [str(q).strip() for q in questions if str(q).strip()]
+    if not cleaned:
+        return None
+    return {
+        "questions": cleaned[:3],
+        "reason": str(parsed.get("reason") or "Requirements are ambiguous.").strip(),
+    }
+
+
+def _planner_user_message(state: AgentState, *, force_plan: bool = False) -> str:
+    db_block = state.get("db_context") or ""
+    incident = bool(state.get("incident_fingerprint"))
+    parts = [
+        f"Repo: {state['repo']}",
+        f"Request: {state['request']}",
+        "",
+        f"RAG context:\n{state.get('rag_context', '')}",
+        "",
+        f"Local DB schema:\n{db_block}",
+        "",
+        f"Prior feedback (if any):\n{state.get('review_feedback', '')}",
+        f"{state.get('test_feedback', '')}",
+    ]
+    if incident or force_plan:
+        parts.append(
+            "\nClarification is NOT allowed for this run (incident/auto-fix or forced). "
+            "You MUST produce an implementation plan (Option A). "
+            "Make reasonable assumptions and document them under Risks."
+        )
+    return "\n".join(parts)
+
+
 def planner_node(state: AgentState) -> AgentState:
     cfg = load_config()
     model = cfg.get("models", {}).get("planner", "claude-opus-4-6")
     system = _read_prompt("planner.md")
-    db_block = state.get("db_context") or ""
-    user = (
-        f"Repo: {state['repo']}\n"
-        f"Request: {state['request']}\n\n"
-        f"RAG context:\n{state.get('rag_context', '')}\n\n"
-        f"Local DB schema:\n{db_block}\n\n"
-        f"Prior feedback (if any):\n{state.get('review_feedback', '')}\n"
-        f"{state.get('test_feedback', '')}"
-    )
-    plan = _llm(model, system, user)
+    clarification_enabled = feature_enabled("planner_clarification")
+    incident = bool(state.get("incident_fingerprint"))
+
+    raw = _llm(model, system, _planner_user_message(state))
+    clarification = _parse_clarification(raw) if clarification_enabled else None
+
+    # Incidents must never pause for the user — re-prompt once, then synthesize if needed.
+    if clarification and incident:
+        raw = _llm(model, system, _planner_user_message(state, force_plan=True))
+        clarification = _parse_clarification(raw)
+        if clarification:
+            qs = clarification["questions"]
+            reason = clarification["reason"]
+            raw = (
+                "# Goal\n"
+                "Best-effort incident fix (clarification not allowed).\n\n"
+                f"## Open questions treated as assumptions\n"
+                f"Reason blocked: {reason}\n"
+                + "\n".join(
+                    f"- {q} — choose the most production-safe, minimal change"
+                    for q in qs
+                )
+                + "\n\n## Files to modify\n"
+                "Infer from the request and RAG context; touch only what is required.\n\n"
+                "## Step-by-step changes\n"
+                "1. Locate the failing path from the incident request/stack.\n"
+                "2. Apply the smallest fix consistent with existing patterns.\n"
+                "3. Keep logging/error handling style unchanged unless required.\n\n"
+                "## Syntax/validation checks\n"
+                "Run repo syntax/tests as configured for this fix run.\n\n"
+                "## Risks and rollback notes\n"
+                "Assumptions above may be wrong; PR review is the HITL gate. "
+                "Revert the orion-branch commit if behavior is incorrect.\n"
+            )
+            clarification = None
+
+    # Feature off: treat any clarification JSON as needing a forced plan.
+    if not clarification_enabled:
+        maybe = _parse_clarification(raw)
+        if maybe:
+            raw = _llm(model, system, _planner_user_message(state, force_plan=True))
+            still = _parse_clarification(raw)
+            if still:
+                qs = still["questions"]
+                raw = (
+                    "# Goal\nProceed with best-effort plan (clarification disabled).\n\n"
+                    "## Assumptions\n"
+                    + "\n".join(f"- {q}" for q in qs)
+                    + "\n\n## Steps\nImplement the minimal fix from the request and RAG context.\n"
+                )
+
+    if clarification and clarification_enabled and not incident:
+        reason = clarification["reason"]
+        questions = clarification["questions"]
+        return {
+            **state,
+            "needs_clarification": True,
+            "clarifying_questions": questions,
+            "status": "needs_clarification",
+            "summary": reason,
+            "error": "",
+            "plan": "",
+            "plan_path": "",
+            "replan": False,
+            "approved": False,
+        }
+
+    plan = raw
     plan_path = write_plan(state["repo"], state["request"], plan)
     return {
         **state,
         "plan": plan,
         "plan_path": str(plan_path),
         "replan": False,
+        "needs_clarification": False,
+        "clarifying_questions": [],
+        "status": "",
     }
 
 
@@ -498,9 +602,17 @@ def git_commit_node(state: AgentState) -> AgentState:
             env=env,
         )
 
-    checkout = run(["checkout", "orion"])
+    push_branch_proc = run(["config", "--get", "hooks.allowed-push-branch"])
+    push_branch = (
+        push_branch_proc.stdout.strip()
+        if push_branch_proc.returncode == 0 and push_branch_proc.stdout.strip()
+        else "orion"
+    )
+    main_only = push_branch == "main"
+
+    checkout = run(["checkout", push_branch])
     if checkout.returncode != 0:
-        run(["checkout", "-b", "orion"])
+        run(["checkout", "-b", push_branch])
 
     run(["add", "-A"])
     msg = (state.get("coder_output") or {}).get("commit_message") or state["request"][:72]
@@ -531,11 +643,11 @@ def git_commit_node(state: AgentState) -> AgentState:
                 "pr_url": "",
                 "approved": False,
                 "error": f"Safety gate blocked push: {reasons}",
-                "summary": f"Commit on orion ({sha[:8]}) but push blocked: {reasons}",
+                "summary": f"Commit on {push_branch} ({sha[:8]}) but push blocked: {reasons}",
             }
-        push = run(["push", "-u", "origin", "orion"])
+        push = run(["push", "-u", "origin", push_branch])
         pushed = push.returncode == 0
-        if pushed:
+        if pushed and not main_only:
             try:
                 pr_url = _create_pr(repo_path, state["repo"], state, timeout)
             except FileNotFoundError:
@@ -544,13 +656,14 @@ def git_commit_node(state: AgentState) -> AgentState:
                 pr_url = "(gh pr create timed out)"
 
     files = ", ".join(state.get("changed_files") or [])
-    summary = f"Committed on orion ({sha[:8]}): {files}"
+    summary = f"Committed on {push_branch} ({sha[:8]}): {files}"
     if pushed:
-        summary += " — pushed to origin/orion"
-        if pr_url and pr_url.startswith("http"):
-            summary += f" — PR: {pr_url}"
-        elif pr_url:
-            summary += f" — {pr_url}"
+        summary += f" — pushed to origin/{push_branch}"
+        if not main_only:
+            if pr_url and pr_url.startswith("http"):
+                summary += f" — PR: {pr_url}"
+            elif pr_url:
+                summary += f" — {pr_url}"
     else:
         summary += " — push deferred (set auto_push_orion or use --push)"
 

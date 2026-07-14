@@ -27,6 +27,12 @@ def _route_after_triage(state: AgentState) -> str:
     return "planner"
 
 
+def _route_after_planner(state: AgentState) -> str:
+    if state.get("needs_clarification"):
+        return "clarify"
+    return "coder"
+
+
 def _route_after_review(state: AgentState) -> str:
     if state.get("approved"):
         return "commit"
@@ -56,7 +62,11 @@ def build_graph():
     g.add_edge(START, "triage")
     g.add_edge("triage", "fetch_rag")
     g.add_conditional_edges("fetch_rag", _route_after_triage, {"planner": "planner", "coder": "coder"})
-    g.add_edge("planner", "coder")
+    g.add_conditional_edges(
+        "planner",
+        _route_after_planner,
+        {"coder": "coder", "clarify": END},
+    )
     g.add_edge("coder", "apply")
     g.add_edge("apply", "syntax")
     g.add_edge("syntax", "test_run")

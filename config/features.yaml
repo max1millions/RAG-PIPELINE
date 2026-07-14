@@ -16,6 +16,8 @@ features:
   watchdog: true
   watchdog_notify: true
   watchdog_auto_fix: false
+  # Opus may exit with clarifying questions instead of coding (interactive chat only).
+  planner_clarification: true
 
 models:
   planner: claude-opus-4-6

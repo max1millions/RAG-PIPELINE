@@ -166,6 +166,30 @@ def invoke_fix(
     return final
 
 
+def _result_status(final: dict[str, Any]) -> str:
+    if final.get("needs_clarification") or final.get("status") == "needs_clarification":
+        return "needs_clarification"
+    if final.get("approved") or final.get("commit_sha"):
+        return "success"
+    return "failed"
+
+
+def _json_safe(final: dict[str, Any]) -> dict[str, Any]:
+    safe = {
+        k: v
+        for k, v in final.items()
+        if k not in ("rag_context", "plan", "coder_output")
+    }
+    status = _result_status(final)
+    safe["status"] = status
+    safe["needs_clarification"] = status == "needs_clarification"
+    questions = final.get("clarifying_questions") or []
+    if not isinstance(questions, list):
+        questions = [questions] if questions else []
+    safe["clarifying_questions"] = questions
+    return safe
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Orion fix runner (RAG + DB + LangGraph)")
     parser.add_argument("request", nargs="?", help="Natural language fix request")
@@ -221,19 +245,20 @@ def main() -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    success = bool(final.get("approved") or final.get("commit_sha"))
+    status = _result_status(final)
+    success = status == "success"
 
     if args.json:
-        safe = {
-            k: v
-            for k, v in final.items()
-            if k not in ("rag_context", "plan", "coder_output")
-        }
-        print(json.dumps(safe, indent=2, default=str))
+        print(json.dumps(_json_safe(final), indent=2, default=str))
     else:
-        print(final.get("summary") or final.get("error") or "Done.")
-        if final.get("pr_url"):
-            print(f"PR: {final['pr_url']}")
+        if status == "needs_clarification":
+            print(final.get("summary") or "Needs clarification before implementing.")
+            for q in final.get("clarifying_questions") or []:
+                print(f"- {q}")
+        else:
+            print(final.get("summary") or final.get("error") or "Done.")
+            if final.get("pr_url"):
+                print(f"PR: {final['pr_url']}")
 
     return 0 if success else 1
 
