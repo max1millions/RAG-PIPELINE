@@ -40,11 +40,41 @@ def _split_sql_statements(text: str) -> list[str]:
     return parts
 
 
+SAMPLE_ROWS_LIMIT = 5
+
+
+def _normalize_fix_sql_file(raw: Any) -> str | None:
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text or text.lower() in ("null", "none"):
+        return None
+    return text
+
+
 def auto_fix_config(check: dict[str, Any]) -> dict[str, Any]:
+    """Normalize per-check auto_fix block.
+
+    mode:
+      - sql  — apply fix_sql_file (default when fix_sql_file is set)
+      - code — invoke RAG + orion-fix (default when enabled without fix_sql_file)
+    """
     raw = check.get("auto_fix") if isinstance(check.get("auto_fix"), dict) else {}
+    fix_file = _normalize_fix_sql_file(raw.get("fix_sql_file"))
+    mode_raw = str(raw.get("mode") or "").strip().lower()
+    if mode_raw in ("code", "sql"):
+        mode = mode_raw
+    elif fix_file:
+        mode = "sql"
+    else:
+        mode = "code"
+    repo = raw.get("repo")
+    repo_str = str(repo).strip() if repo not in (None, "", "null", "none") else None
     return {
         "enabled": bool(raw.get("enabled")),
-        "fix_sql_file": raw.get("fix_sql_file"),
+        "mode": mode,
+        "repo": repo_str,
+        "fix_sql_file": fix_file,
     }
 
 
@@ -52,8 +82,18 @@ def should_attempt_auto_fix(check: dict[str, Any]) -> bool:
     if not feature_enabled("watchdog_auto_fix"):
         return False
     cfg = auto_fix_config(check)
-    fix_file = cfg.get("fix_sql_file")
-    return cfg["enabled"] and bool(fix_file) and str(fix_file).lower() not in ("null", "none")
+    if not cfg["enabled"]:
+        return False
+    if cfg["mode"] == "sql":
+        return bool(cfg.get("fix_sql_file"))
+    # mode == code: dual-gate only (repo resolved at remediate time)
+    return True
+
+
+def _sample_rows(rows: list[Any], *, limit: int = SAMPLE_ROWS_LIMIT) -> list[Any]:
+    if not rows:
+        return []
+    return list(rows[:limit])
 
 
 def _load_sql_file_statements(sql_file: str) -> list[str]:
@@ -188,6 +228,9 @@ def run_check(check: dict[str, Any]) -> dict[str, Any]:
         display_metric = metric_value
         if check.get("assertion") == "max_rows" and row_count > 1:
             display_metric = float(row_count)
+        sample: list[Any] = []
+        if not passed and result.get("type") == "rows":
+            sample = _sample_rows(list(result.get("rows") or []))
         out.update(
             {
                 "passed": passed,
@@ -200,6 +243,8 @@ def run_check(check: dict[str, Any]) -> dict[str, Any]:
                 "repos_hint": check.get("repos_hint") or "",
                 "message_template": check.get("message_template") or "",
                 "threshold_pct": check.get("threshold_pct"),
+                "sql_file": str(check.get("sql_file") or ""),
+                "sample_rows": sample,
             }
         )
     except Exception as exc:
@@ -208,8 +253,10 @@ def run_check(check: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_auto_fix(check: dict[str, Any]) -> tuple[bool, str]:
-    """Run configured fix SQL file (write). Returns (ok, detail)."""
+    """Run configured fix SQL file (write). Returns (ok, detail). mode: sql only."""
     cfg = auto_fix_config(check)
+    if cfg.get("mode") != "sql":
+        return False, f"run_auto_fix is for mode=sql, got mode={cfg.get('mode')}"
     fix_file = cfg.get("fix_sql_file")
     if not fix_file:
         return False, "no fix_sql_file configured"

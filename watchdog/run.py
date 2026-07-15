@@ -17,6 +17,7 @@ from incidents.fsm import load_active, save_active  # noqa: E402
 from incidents.settings import load_incidents_config  # noqa: E402
 from watchdog.baseline import reset_baseline  # noqa: E402
 from watchdog.checks import (  # noqa: E402
+    auto_fix_config,
     run_all_checks,
     run_auto_fix,
     run_check,
@@ -30,6 +31,7 @@ from watchdog.fsm import (  # noqa: E402
     upsert_anomaly,
 )
 from watchdog.notify import send_anomaly_notification  # noqa: E402
+from watchdog.remediate import remediate_by_prefix, remediate_record  # noqa: E402
 from watchdog.settings import RUN_HISTORY_PATH, ensure_data_dir, load_watchdog_config  # noqa: E402
 
 
@@ -85,14 +87,47 @@ def run_watchdog(*, dry_run: bool = False) -> dict:
 
         auto_fix_attempted = False
         if should_attempt_auto_fix(check_def) and not dry_run:
-            fix_ok, fix_detail = run_auto_fix(check_def)
-            auto_fix_attempted = fix_ok
-            if fix_ok:
-                result["auto_fixed"].append({"check_id": check_id, "detail": fix_detail})
-                check_result = run_check(check_def)
-                check_result["auto_fix_attempted"] = True
-                if check_result.get("passed"):
-                    continue
+            af = auto_fix_config(check_def)
+            if af.get("mode") == "code":
+                # Persist anomaly first so remediate has a record + sample rows.
+                record, _, _ = upsert_anomaly(
+                    check_def,
+                    check_result,
+                    renotify_every=renotify_every,
+                    renotify_hours=renotify_hours,
+                )
+                fix_result = remediate_record(record, check=check_def)
+                auto_fix_attempted = True
+                record["auto_fix_attempted"] = True
+                if fix_result.get("ok"):
+                    result["auto_fixed"].append(
+                        {
+                            "check_id": check_id,
+                            "mode": "code",
+                            "detail": fix_result.get("summary") or fix_result.get("commit_sha") or "ok",
+                        }
+                    )
+                    check_result = run_check(check_def)
+                    check_result["auto_fix_attempted"] = True
+                    if check_result.get("passed"):
+                        continue
+                else:
+                    result["errors"].append(
+                        f"auto_fix code {check_id}: {fix_result.get('error', 'unknown')}"
+                    )
+            else:
+                fix_ok, fix_detail = run_auto_fix(check_def)
+                auto_fix_attempted = fix_ok
+                if fix_ok:
+                    result["auto_fixed"].append(
+                        {"check_id": check_id, "mode": "sql", "detail": fix_detail}
+                    )
+                    check_result = run_check(check_def)
+                    check_result["auto_fix_attempted"] = True
+                    if check_result.get("passed"):
+                        continue
+                else:
+                    result["errors"].append(f"auto_fix sql {check_id}: {fix_detail}")
 
         check_result["auto_fix_attempted"] = auto_fix_attempted
         result["failures"].append(check_result)
@@ -154,6 +189,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             print(f"  FAIL {f.get('check_id')}: {f.get('reason')}")
         for n in result.get("notified") or []:
             print(f"  NOTIFY {n.get('fingerprint')} ({n.get('check_id')})")
+        for item in result.get("auto_fixed") or []:
+            print(f"  AUTO-FIX {item.get('check_id')} ({item.get('mode')}): {item.get('detail')}")
         for err in result.get("errors") or []:
             print(f"  ERROR: {err}", file=sys.stderr)
     return 0 if result.get("ok") else 1
@@ -211,6 +248,29 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_remediate(args: argparse.Namespace) -> int:
+    """Manual RAG/orion-fix path — does not require watchdog_auto_fix."""
+    require_feature("langgraph_multiagent", "LangGraph multi-agent")
+    result = remediate_by_prefix(args.prefix, push=args.push, dry_run=args.dry_run)
+    if args.json:
+        print(json.dumps(result, indent=2, default=str))
+    else:
+        if result.get("ok"):
+            if result.get("dry_run"):
+                print(f"DRY-RUN remediate {result.get('fingerprint')} repo={result.get('repos_name')}")
+                print(result.get("request_preview", "")[:500])
+            else:
+                print(
+                    f"Remediated {result.get('fingerprint')}: "
+                    f"{result.get('summary') or result.get('commit_sha') or 'ok'}"
+                )
+                if result.get("pr_url"):
+                    print(f"  PR: {result['pr_url']}")
+        else:
+            print(f"ERROR: {result.get('error')}", file=sys.stderr)
+    return 0 if result.get("ok") else 1
+
+
 def cmd_baseline_reset(args: argparse.Namespace) -> int:
     reset_baseline(args.check_id)
     if args.json:
@@ -249,6 +309,16 @@ def main() -> int:
     p_resolve.add_argument("prefix")
     p_resolve.add_argument("--json", action="store_true")
     p_resolve.set_defaults(func=cmd_resolve)
+
+    p_remed = sub.add_parser(
+        "remediate",
+        help="Run orion-fix for a watchdog anomaly (manual; does not need watchdog_auto_fix)",
+    )
+    p_remed.add_argument("prefix", help="Fingerprint prefix")
+    p_remed.add_argument("--dry-run", action="store_true")
+    p_remed.add_argument("--push", action="store_true", help="Push after commit when auto_push allows")
+    p_remed.add_argument("--json", action="store_true")
+    p_remed.set_defaults(func=cmd_remediate)
 
     p_bl = sub.add_parser("baseline", help="Baseline management")
     bl_sub = p_bl.add_subparsers(dest="baseline_cmd", required=True)

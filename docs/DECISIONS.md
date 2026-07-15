@@ -55,7 +55,7 @@ Simple tasks skip the planner. **Safety gate** before commit: max diff size and 
 
 Both share the incident FSM for dedupe and notification. **`notify_backend: log`** is the OSS default (stdout only); operators enable BlueBubbles/iMessage in overlay config.
 
-Automation (`incidents_poll`, `auto_fix_incidents`, etc.) defaults **off** in public `features.yaml` — enable explicitly in overlay.
+Automation (`incidents_poll`, `auto_fix_incidents`, `watchdog_auto_fix`, etc.) defaults **off** in public `features.yaml` — enable explicitly in overlay. Watchdog Phase 4b dual-gates code (`mode: code` → RAG/`orion-fix`) or SQL (`fix_sql_file`) remediations behind `watchdog_auto_fix` plus per-check `auto_fix.enabled`; manual `orion-watchdog remediate` stays available when the parent `watchdog` feature is on.
 
 ## 6. RightsTune as portfolio deployment
 

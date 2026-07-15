@@ -75,6 +75,7 @@ print('redaction OK')
 check "orion-fix CLI help" "$ROOT/bin/orion-fix" --help
 
 check "orion-incident remediate help" "$ROOT/bin/orion-incident" remediate --help
+check "orion-watchdog remediate help" "$ROOT/bin/orion-watchdog" remediate --help
 
 check "audit-before-publish exits 0" bash "$ROOT/scripts/audit-before-publish.sh"
 

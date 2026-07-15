@@ -26,6 +26,26 @@ def format_anomaly_message(record: dict[str, Any], *, auto_fix_attempted: bool =
     return text[:320]
 
 
+def format_fix_message(
+    record: dict[str, Any],
+    *,
+    success: bool,
+    detail: str = "",
+    pr_url: str = "",
+) -> str:
+    fp = str(record.get("fingerprint") or "")[:8]
+    check_id = str(record.get("check_id") or "check")
+    if success:
+        text = f"Watchdog auto-fix OK ({check_id}, ref {fp})."
+        if pr_url:
+            text += f" PR: {pr_url}"
+        elif detail:
+            text += f" {detail[:120]}"
+    else:
+        text = f"Watchdog auto-fix failed ({check_id}, ref {fp}). {detail[:180]}"
+    return text[:320]
+
+
 def _send_bluebubbles(
     targets: list[str],
     text: str,
@@ -76,6 +96,29 @@ def send_anomaly_notification(
 
     if dry_run:
         return True, f"DRY-RUN notify {targets or '(none)'}: {text}"
+
+    if backend == "log" or not targets:
+        print(f"[notify] {text}", file=sys.stdout)
+        return True, text
+
+    return _send_bluebubbles(targets, text, cfg)
+
+
+def send_fix_notification(
+    record: dict[str, Any],
+    *,
+    success: bool,
+    detail: str = "",
+    pr_url: str = "",
+    dry_run: bool = False,
+) -> tuple[bool, str]:
+    cfg = load_incidents_config()
+    targets: list[str] = list(cfg.get("notify_targets") or [])
+    backend = str(cfg.get("notify_backend") or "log").strip().lower()
+    text = format_fix_message(record, success=success, detail=detail, pr_url=pr_url)
+
+    if dry_run:
+        return True, f"DRY-RUN fix notify {targets or '(none)'}: {text}"
 
     if backend == "log" or not targets:
         print(f"[notify] {text}", file=sys.stdout)

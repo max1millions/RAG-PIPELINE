@@ -56,6 +56,9 @@ def upsert_anomaly(
     )
 
     if existing is None or existing.get("state") in ("ANOMALY_RESOLVED", "RESOLVED"):
+        af_cfg = check.get("auto_fix") if isinstance(check.get("auto_fix"), dict) else {}
+        repo_override = af_cfg.get("repo")
+        repos_name = str(repo_override or check.get("repos_hint") or "SQL-SCRIPTS")
         record = {
             "incident_id": str(uuid.uuid4()),
             "fingerprint": fp,
@@ -66,8 +69,8 @@ def upsert_anomaly(
             "kind": "anomaly",
             "check_id": check_id,
             "severity": result.get("severity") or check.get("severity") or "warning",
-            "repos_name": str(check.get("repos_hint") or "SQL-SCRIPTS"),
-            "repos_rel_path": "",
+            "repos_name": repos_name,
+            "repos_rel_path": str(check.get("sql_file") or result.get("sql_file") or ""),
             "module": "watchdog",
             "tool": f"watchdog:{check_id}",
             "message": message,
@@ -75,6 +78,8 @@ def upsert_anomaly(
             "baseline_value": result.get("baseline_value"),
             "threshold_pct": result.get("threshold_pct") or check.get("threshold_pct"),
             "assertion_reason": result.get("reason"),
+            "sql_file": str(check.get("sql_file") or result.get("sql_file") or ""),
+            "sample_rows": list(result.get("sample_rows") or []),
             "seen_count": 1,
             "last_notified_at": None,
         }
@@ -88,6 +93,14 @@ def upsert_anomaly(
     existing["metric_value"] = result.get("metric_value")
     existing["baseline_value"] = result.get("baseline_value")
     existing["assertion_reason"] = result.get("reason")
+    if result.get("sample_rows") is not None:
+        existing["sample_rows"] = list(result.get("sample_rows") or [])
+    if result.get("sql_file") or check.get("sql_file"):
+        existing["sql_file"] = str(result.get("sql_file") or check.get("sql_file") or "")
+        existing["repos_rel_path"] = existing["sql_file"]
+    af_cfg = check.get("auto_fix") if isinstance(check.get("auto_fix"), dict) else {}
+    if af_cfg.get("repo"):
+        existing["repos_name"] = str(af_cfg["repo"])
     if existing.get("state") == "ANOMALY_RESOLVED":
         existing["state"] = "ANOMALY_OPEN"
     save_active(active)
@@ -102,6 +115,34 @@ def mark_anomaly_notified(record: dict[str, Any]) -> None:
 
 def mark_anomaly_escalated(record: dict[str, Any], error: str) -> None:
     record["state"] = "ANOMALY_ESCALATED"
+    record["escalation_reason"] = error[:500]
+    record["updated_at"] = _utc_now_iso()
+
+
+def mark_anomaly_fixing(record: dict[str, Any]) -> None:
+    record["state"] = "FIXING"
+    record["updated_at"] = _utc_now_iso()
+
+
+def mark_anomaly_fixed(
+    record: dict[str, Any],
+    *,
+    commit_sha: str = "",
+    pr_url: str = "",
+    summary: str = "",
+) -> None:
+    record["state"] = "ANOMALY_RESOLVED"
+    record["fix_commit_sha"] = commit_sha
+    record["fix_pr_url"] = pr_url
+    record["fix_summary"] = summary[:500]
+    record["auto_fix_attempted"] = True
+    record["updated_at"] = _utc_now_iso()
+
+
+def mark_anomaly_fix_failed(record: dict[str, Any], error: str) -> None:
+    record["state"] = "ANOMALY_ESCALATED"
+    record["fix_error"] = error[:500]
+    record["auto_fix_attempted"] = True
     record["escalation_reason"] = error[:500]
     record["updated_at"] = _utc_now_iso()
 

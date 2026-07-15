@@ -9,6 +9,7 @@
 #   exact_rows — fails if the row count != `threshold`
 #
 # Per-check auto_fix.enabled is gated by features.watchdog_auto_fix in features.yaml.
+# mode: code → RAG + orion-fix; mode: sql → apply fix_sql_file.
 # Stale local dumps can produce false positives; I rely on a current import.
 
 checks:
@@ -22,6 +23,8 @@ checks:
     message_template: "Found {metric_value} data integrity violations."
     auto_fix:
       enabled: false
+      mode: code
+      repo: null   # e.g. CWR-INTERFACE — override when repos_hint is SQL-SCRIPTS
       fix_sql_file: null
 
   # Additional checks follow this structure:
@@ -36,4 +39,6 @@ checks:
   #   message_template: "Found {metric_value} issues."
   #   auto_fix:
   #     enabled: false
+  #     mode: code
+  #     repo: null
   #     fix_sql_file: null
