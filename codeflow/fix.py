@@ -42,16 +42,8 @@ def _build_rag_context(
             )
         except Exception as exc:
             return f"(RAG unavailable: {exc})"
-    seen: set[tuple[str, str, int]] = set()
-    unique = []
-    for h in all_hits:
-        key = (h.collection, h.path, h.chunk)
-        if key not in seen:
-            seen.add(key)
-            unique.append(h)
-        if len(unique) >= 6:
-            break
-    return retrieve_to_context_block(unique[:6])
+    # Distance gate, path dedupe, and early-stop happen inside context assembly.
+    return retrieve_to_context_block(all_hits)
 
 
 def _prompt_from_incident(record: dict[str, Any]) -> tuple[str, str, str]:

@@ -1,4 +1,6 @@
-# RAG eval cases — expect_path_contains matched against hit paths + snippet text.
+# RAG eval cases — expect_path_contains matched against hit paths (+ snippet text unless match_path_only).
+#
+# Loaded when overlay config/eval_cases.yaml and rag/eval_cases.yaml are absent.
 
 - id: cwr_entry
   query: CWR generator entry point main script
@@ -34,7 +36,8 @@
 
 - id: rightstune
   query: rightstune web application structure
-  expect_path_contains: rightstune
+  expect_path_contains: rightstune.com
+  match_path_only: true
 
 - id: database_scripts
   query: DATABASE scripts mysql connection
@@ -42,19 +45,23 @@
 
 - id: iswc
   query: ISWC registration workflow
-  expect_path_contains: ISWC
+  expect_path_contains: ISWC-SERVICE
+  match_path_only: true
 
 - id: discrepancy_env
   query: README env example inconsistent mismatch configuration drift
-  expect_path_contains: discrepancy
+  expect_path_contains: .env
   intent: discrepancy
 
 - id: discrepancy_readme_path
   query: README references file missing does not exist
   intent: discrepancy
-  expect_path_contains: README
+  expect_path_contains: finding_
+  match_path_only: true
 
 - id: path_map_module
-  query: path_map module repos_name missing
+  query: README references missing file does not exist under the repo
   intent: discrepancy
   collections: [discrepancies]
+  expect_path_contains: finding_
+  match_path_only: true

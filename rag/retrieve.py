@@ -15,8 +15,15 @@ from rag.settings import (
     BM25_CORPUS_DIR,
     bm25_top_k_default,
     collection_names,
+    context_max_chars_default,
+    context_max_chunks_default,
+    early_stop_strong_default,
     hybrid_enabled_by_config,
+    hybrid_vector_weight_default,
+    max_chunks_per_path_default,
+    max_distance_default,
     rag_config,
+    strong_distance_default,
     top_k_default,
 )
 
@@ -52,6 +59,11 @@ class Hit:
             "kind": self.kind,
             **self.extra,
         }
+
+    def path_key(self) -> str:
+        if self.repo and not self.path.startswith(f"{self.repo}/"):
+            return f"{self.repo}/{self.path}"
+        return self.path
 
 
 def _use_hybrid(explicit: bool | None) -> bool:
@@ -185,27 +197,104 @@ def _bm25_hits(question: str, collection_key: str, *, k: int) -> list[Hit]:
     return hits
 
 
-def _rrf_merge(vector: list[Hit], bm25: list[Hit], k: int = 60) -> list[Hit]:
+def _rrf_merge(
+    vector: list[Hit],
+    bm25: list[Hit],
+    k: int = 60,
+    *,
+    vector_weight: float | None = None,
+) -> list[Hit]:
+    """Reciprocal rank fusion with configurable vector vs BM25 weight."""
+    vw = hybrid_vector_weight_default() if vector_weight is None else vector_weight
+    vw = min(1.0, max(0.0, float(vw)))
+    bw = 1.0 - vw
+
     scores: dict[tuple[str, str, int], float] = {}
     items: dict[tuple[str, str, int], Hit] = {}
 
     for rank, hit in enumerate(vector):
         key = (hit.collection, hit.path, hit.chunk)
-        scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
+        scores[key] = scores.get(key, 0) + vw * (1.0 / (k + rank + 1))
         items[key] = hit
 
     for rank, hit in enumerate(bm25):
         key = (hit.collection, hit.path, hit.chunk)
-        scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
+        scores[key] = scores.get(key, 0) + bw * (1.0 / (k + rank + 1))
         if key not in items:
             items[key] = hit
 
     merged = sorted(scores.items(), key=lambda x: -x[1])
     out: list[Hit] = []
     for key, _score in merged:
-        hit = items[key]
-        out.append(hit)
+        out.append(items[key])
     return out
+
+
+def filter_hits_for_context(
+    hits: list[Hit],
+    *,
+    max_chunks: int | None = None,
+    max_distance: float | None = None,
+    strong_distance: float | None = None,
+    early_stop_strong: int | None = None,
+    max_chunks_per_path: int | None = None,
+) -> list[Hit]:
+    """Keep only relevant hits for prompt context: distance gate, path budget, early-stop."""
+    if not hits:
+        return []
+
+    max_chunks = context_max_chunks_default() if max_chunks is None else max_chunks
+    max_distance = max_distance_default() if max_distance is None else max_distance
+    strong_distance = (
+        strong_distance_default() if strong_distance is None else strong_distance
+    )
+    early_stop_strong = (
+        early_stop_strong_default() if early_stop_strong is None else early_stop_strong
+    )
+    max_chunks_per_path = (
+        max_chunks_per_path_default()
+        if max_chunks_per_path is None
+        else max_chunks_per_path
+    )
+
+    ordered = sorted(hits, key=lambda h: h.distance)
+    gated = [h for h in ordered if h.distance <= max_distance]
+    if not gated:
+        # Never return empty when callers had hits — keep the single best neighbor.
+        gated = ordered[:1]
+
+    per_path: dict[str, int] = {}
+    selected: list[Hit] = []
+    strong_count = 0
+
+    for h in gated:
+        pkey = h.path_key()
+        used = per_path.get(pkey, 0)
+        if used >= max_chunks_per_path:
+            continue
+        selected.append(h)
+        per_path[pkey] = used + 1
+        if h.distance <= strong_distance:
+            strong_count += 1
+        if strong_count >= early_stop_strong and len(selected) >= early_stop_strong:
+            break
+        if len(selected) >= max_chunks:
+            break
+
+    return selected
+
+
+def _snippet_char_budget(distance: float, max_chars: int) -> int:
+    """Strong hits keep full budget; weaker hits shrink toward a floor."""
+    strong = strong_distance_default()
+    weak = max_distance_default()
+    if distance <= strong:
+        return max_chars
+    if distance >= weak:
+        return max(120, max_chars // 4)
+    span = max(weak - strong, 1e-6)
+    t = (distance - strong) / span
+    return max(120, int(max_chars * (1.0 - 0.75 * t)))
 
 
 @traceable_rag(name="orion_rag_retrieve", run_type="retriever")
@@ -252,13 +341,27 @@ def retrieve(
     return merged[:k]
 
 
-def retrieve_to_context_block(hits: list[Hit], *, max_chars: int = 1200) -> str:
+def retrieve_to_context_block(
+    hits: list[Hit],
+    *,
+    max_chars: int | None = None,
+    max_chunks: int | None = None,
+    filter_context: bool = True,
+) -> str:
+    """Assemble prompt context from hits, optionally filtering to relevant snippets only."""
+    if max_chars is None:
+        max_chars = context_max_chars_default()
+
+    selected = (
+        filter_hits_for_context(hits, max_chunks=max_chunks) if filter_context else hits
+    )
     blocks: list[str] = []
-    for h in hits:
-        path = h.path
-        if h.repo and not path.startswith(f"{h.repo}/"):
-            path = f"{h.repo}/{path}"
-        block = f"### [{h.collection}] {path} (chunk {h.chunk})\n{h.text[:max_chars]}"
+    for h in selected:
+        path = h.path_key()
+        budget = _snippet_char_budget(h.distance, max_chars)
+        if budget <= 0:
+            continue
+        block = f"### [{h.collection}] {path} (chunk {h.chunk})\n{h.text[:budget]}"
         if block not in blocks:
             blocks.append(block)
     return "\n\n".join(blocks)

@@ -132,7 +132,8 @@ def fetch_rag_node(state: AgentState) -> AgentState:
             hybrid=False,
             intent=intent,
         )
-        context = retrieve_to_context_block(hits, max_chars=1500)
+        # Cap snippet size; relevance filtering / path dedupe applied in assembler.
+        context = retrieve_to_context_block(hits, max_chars=1200)
     except Exception as exc:
         context = f"(RAG unavailable: {exc})"
     return {**state, "rag_context": context}

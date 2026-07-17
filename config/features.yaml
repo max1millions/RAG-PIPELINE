@@ -38,6 +38,14 @@ limits:
   rag_chunk_overlap: 200
   rag_top_k: 8
   rag_bm25_top_k: 24
+  # Cosine distance gate for context assembly (Chroma cosine; lower is better).
+  rag_max_distance: 0.85
+  # Hits at/below this distance count as "strong" for early-stop.
+  rag_strong_distance: 0.40
+  rag_early_stop_strong: 3
+  rag_context_max_chunks: 6
+  rag_context_max_chars: 900
+  rag_max_chunks_per_path: 1
   eval_recall_threshold: 0.7
 
 rag:
@@ -48,6 +56,7 @@ rag:
     playbooks: orion_playbooks
     discrepancies: orion_discrepancies
   hybrid: false
+  # Relative weight for vector ranks in hybrid RRF (BM25 gets 1 - weight).
   hybrid_vector_weight: 0.7
   incremental: true
   index_playbooks_on_fix: true

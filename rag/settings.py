@@ -86,6 +86,44 @@ def bm25_top_k_default() -> int:
     return int(cfg.get("limits", {}).get("rag_bm25_top_k", 24))
 
 
+def max_distance_default() -> float:
+    """Drop hits with cosine distance above this before context assembly."""
+    cfg = load_config()
+    return float(cfg.get("limits", {}).get("rag_max_distance", 0.85))
+
+
+def strong_distance_default() -> float:
+    """Hits at or below this distance count as strong for early-stop."""
+    cfg = load_config()
+    return float(cfg.get("limits", {}).get("rag_strong_distance", 0.40))
+
+
+def early_stop_strong_default() -> int:
+    cfg = load_config()
+    return int(cfg.get("limits", {}).get("rag_early_stop_strong", 3))
+
+
+def context_max_chunks_default() -> int:
+    cfg = load_config()
+    return int(cfg.get("limits", {}).get("rag_context_max_chunks", 6))
+
+
+def context_max_chars_default() -> int:
+    cfg = load_config()
+    return int(cfg.get("limits", {}).get("rag_context_max_chars", 900))
+
+
+def max_chunks_per_path_default() -> int:
+    cfg = load_config()
+    return int(cfg.get("limits", {}).get("rag_max_chunks_per_path", 1))
+
+
+def hybrid_vector_weight_default() -> float:
+    """Relative weight for vector ranks in hybrid RRF (BM25 gets 1 - weight)."""
+    w = float(rag_config().get("hybrid_vector_weight", 0.7))
+    return min(1.0, max(0.0, w))
+
+
 def hybrid_enabled_by_config() -> bool:
     return bool(rag_config().get("hybrid", False))
 
