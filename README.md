@@ -24,7 +24,7 @@ RightsTune runs a large set of Python, PHP, and SQL pipelines that handle music 
 
 Orion uses this **RAG pipeline** to pull small, relevant chunks from a local Chroma index instead of loading whole repos into model context. Indexing and search are local (embeddings only, no LLM on the retrieval path). This is so Orion can understand the codebase well enough to provide context to Claude when making code changes autonomously.
 
-**In short:** this module gives Orion a searchable memory of the entire RightsTune source code, READMEs, SQL scripts, docs, etc. so it can answer questions and ship fixes grounded in how the system actually works. Orion pushes code changes to a separate branch in each repo so I can review and merge via human-in-the-loop protocols (HITL). These workflows have helped Rightstune generate over $44,000 in revenue within a few months.
+**In short:** this module gives Orion a searchable memory of the entire RightsTune source code, READMEs, SQL scripts, docs, etc. so it can answer questions and ship fixes grounded in how the system actually works. Orion pushes code changes to a separate branch in each repo so I can review and merge via human-in-the-loop protocols (HITL).
 
 Orion uses RAG in two ways: `**orion-rag-query**` for exploration and answers, and `**orion-fix**` which injects RAG context into the LangGraph code-change workflow.
 
@@ -47,11 +47,11 @@ iMessage → Orion
   └─ Fix REPOS code ────► orion-rag-query → orion-fix → Claude + RAG chunks
 ```
 
-Orion also supports multimodal iMessage (photos, voice memos), self-healing automated alerts from `orion-incident` / `orion-watchdog` — *autonomous agent loops* for production failures and local SQL anomalies.
+Orion also supports multimodal iMessage (photos, voice memos), automated alerts from `orion-incident` / `orion-watchdog` — *autonomous agent loops* for production failures and local SQL anomalies.
 
 ### Local proxy `.env` (Linux)
 
-When Orion runs Python code locally to run backtests in any repository when modifying code, the openclaw agent cannot read secure credentials to enforce the principle of least privilege. It can only read dummy variables injected by proxy scripts.
+When Orion runs Python code in it's linux instance locally to run backtests in any repository when modifying code, the openclaw agent cannot read secure credentials to enforce the principle of least privilege. It can only read dummy variables injected by proxy scripts.
 
 Default production execution only uses **MCP** `rightstune` on the Mac when I make natural language commands (e.g. "Download and process acknowledgements"). The proxy credentials are for optional local runs for testing by the agent without copying secrets to Linux. When I say something like "Let's modify the code..." Orion routes requests through the RAG pipeline (and ultimately delegates code changes to Claude subagents).
 
