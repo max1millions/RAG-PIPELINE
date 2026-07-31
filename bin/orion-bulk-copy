@@ -3,4 +3,4 @@ set -euo pipefail
 STACK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PYTHONPATH="$STACK_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export ORT_LOG_LEVEL="${ORT_LOG_LEVEL:-3}"
-exec "$STACK_ROOT/.venv/bin/python" "$STACK_ROOT/rag/eval.py" "$@"
+exec "$STACK_ROOT/.venv/bin/python" "$STACK_ROOT/codeflow/bulk_copy.py" "$@"
