@@ -8,6 +8,7 @@ from codeflow.nodes import (
     AgentState,
     apply_changes_node,
     coder_node,
+    cursor_delegate_node,
     fetch_rag_node,
     finalize_error_node,
     git_commit_node,
@@ -20,6 +21,8 @@ from codeflow.nodes import (
 
 
 def _route_after_triage(state: AgentState) -> str:
+    if state.get("code_backend") == "cursor":
+        return "cursor"
     if state.get("plan_path") and state.get("plan"):
         return "coder"
     if state.get("complexity") == "simple":
@@ -40,18 +43,29 @@ def _route_after_review(state: AgentState) -> str:
     max_iter = state.get("max_iterations", 3)
     if iteration >= max_iter:
         return "fail"
+    if state.get("code_backend") == "cursor":
+        err = str(state.get("error") or "")
+        if any(
+            s in err
+            for s in ("CURSOR_API_KEY", "Authentication required", "not found", "auth failed")
+        ):
+            return "fail"
+        return "cursor"
     if state.get("replan"):
         return "planner"
     return "coder"
 
 
-def build_graph():
+def build_graph(*, backend: str | None = None):
+    """Compile LangGraph. Pass backend via initial state code_backend (see fix.py)."""
+    del backend  # resolved in invoke_fix → initial state
     g = StateGraph(AgentState)
 
     g.add_node("triage", triage_node)
     g.add_node("fetch_rag", fetch_rag_node)
     g.add_node("planner", planner_node)
     g.add_node("coder", coder_node)
+    g.add_node("cursor", cursor_delegate_node)
     g.add_node("apply", apply_changes_node)
     g.add_node("syntax", syntax_check_node)
     g.add_node("test_run", test_run_node)
@@ -61,7 +75,11 @@ def build_graph():
 
     g.add_edge(START, "triage")
     g.add_edge("triage", "fetch_rag")
-    g.add_conditional_edges("fetch_rag", _route_after_triage, {"planner": "planner", "coder": "coder"})
+    g.add_conditional_edges(
+        "fetch_rag",
+        _route_after_triage,
+        {"planner": "planner", "coder": "coder", "cursor": "cursor"},
+    )
     g.add_conditional_edges(
         "planner",
         _route_after_planner,
@@ -69,12 +87,19 @@ def build_graph():
     )
     g.add_edge("coder", "apply")
     g.add_edge("apply", "syntax")
+    g.add_edge("cursor", "syntax")
     g.add_edge("syntax", "test_run")
     g.add_edge("test_run", "review")
     g.add_conditional_edges(
         "review",
         _route_after_review,
-        {"commit": "commit", "coder": "coder", "planner": "planner", "fail": "fail"},
+        {
+            "commit": "commit",
+            "coder": "coder",
+            "planner": "planner",
+            "cursor": "cursor",
+            "fail": "fail",
+        },
     )
     g.add_edge("commit", END)
     g.add_edge("fail", END)

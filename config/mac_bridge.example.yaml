@@ -1,0 +1,25 @@
+# Mac Mini SSH bridge for orion-fix (Cursor on production Developer tree).
+#
+# Copy to $ORION_OVERLAY_ROOT/config/mac_bridge.yaml and fill real values.
+# Never commit real hosts, Tailscale IPs, or identity paths with private keys
+# into this public repo.
+
+enabled: false
+
+# ssh_host: mac-hostname-or-tailscale-name
+# ssh_user: your-mac-user
+# identity_file: ~/.ssh/id_ed25519_mac_bridge
+# developer_root: /Users/YOU/Developer
+
+# Optional absolute path to cursor-agent on the Mac (auto-discovered when empty).
+# cursor_agent_bin: ""
+
+# Optional model override for Mac runs (defaults to features.models.cursor).
+# model: auto
+
+# Paths under developer_root that must run on the Mac (not the Linux REPOS clone).
+mac_only_prefixes:
+  - OTHER/scripts
+
+# Prefer PR on the Mac git checkout when the module is mirrored in REPOS.
+prefer_mac_pr: true

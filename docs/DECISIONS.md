@@ -43,9 +43,9 @@ If secrets ever touched disk, rotate keys and re-index the overlay.
 
 ## 4. Codeflow (orion-fix)
 
-LangGraph pipeline: triage → fetch RAG context → planner (Opus) or coder (Sonnet) → apply patch → syntax check → repo tests → review → commit.
+Default `features.code_backend: cursor`: Orion owns RAG/DB brief, safety, tests, and git; **Cursor Agent** owns the mid-flight edit loop (node-local REPOS or Mac Mini SSH bridge for Developer/cron-only trees). Fallback `--backend=langgraph`: triage → fetch RAG → planner (Opus) or coder (Sonnet) → apply JSON patches → syntax → tests → review → commit.
 
-Simple tasks skip the planner. **Safety gate** before commit: max diff size and forbidden paths (`.env`, `.github/`). Plans saved under `~/.openclaw/workspace/plans/` as `REPO__slug__timestamp.md`.
+Simple LangGraph tasks skip the planner. **Safety gate** before commit: max diff size (raised for cursor) and forbidden paths (`.env`, `.github/`). Plans saved under `~/.openclaw/workspace/plans/` as `REPO__slug__timestamp.md`. Mac host/SSH identity and `CURSOR_API_KEY` live only in the private overlay.
 
 ## 5. Incidents and watchdog
 

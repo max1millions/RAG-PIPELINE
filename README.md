@@ -20,7 +20,7 @@ RAG pipeline module for **Orion**, the OpenClaw agent that operates the [RightsT
 
 RightsTune runs a large set of Python, PHP, and SQL pipelines that handle music publishing administration — registering works with societies worldwide, generating **CWR** (Common Works Registration) files, reconciling **ISWC** and **IPI** identifiers via the ISWC Resolution Service and IPI Context API, ingesting royalty statements, validating catalog data, operating the client portal at rightstune.com, & much more.
 
-**Orion** is the OpenClaw agent that I can talk to via iMessage that runs and maintains those pipelines. It uses custom built MCP tools to call production code, and delegates code edits to `**orion-fix`**, a subprocess that runs the LangGraph code-change workflow with Claude (Opus planner, Sonnet coder). Opus writes plan documents; Sonnet implements the edits.
+**Orion** is the OpenClaw agent that I can talk to via iMessage that runs and maintains those pipelines. It uses custom built MCP tools to call production code, and delegates code edits to `**orion-fix`**, a subprocess that runs the LangGraph code-change workflow with Claude (Opus planner, Sonnet coder). By default Orion delegates the edit loop to **Cursor Agent** (node REPOS or Mac Mini SSH bridge); `--backend=langgraph` keeps Opus planner + Sonnet coder.
 
 Orion uses this **RAG pipeline** to pull small, relevant chunks from a local Chroma index instead of loading whole repos into model context. Indexing and search are local (embeddings only, no LLM on the retrieval path). This is so Orion can understand the codebase well enough to provide context to Claude when making code changes autonomously.
 
@@ -44,7 +44,7 @@ Mac Mini
 iMessage → Orion
   ├─ Run pipeline ──────► MCP rightstune → Mac production     [no Claude]
   ├─ Ask about code ────► orion-rag-query                     [Gemini only]
-  └─ Fix REPOS code ────► orion-rag-query → orion-fix → Claude + RAG chunks
+  └─ Fix REPOS code ────► orion-rag-query → orion-fix → Cursor (or Claude) + RAG
 ```
 
 Orion also supports multimodal iMessage (photos, voice memos), automated alerts from `orion-incident` / `orion-watchdog` — *autonomous agent loops* for production failures and local SQL anomalies.

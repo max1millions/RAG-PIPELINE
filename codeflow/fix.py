@@ -114,8 +114,12 @@ def invoke_fix(
     db_context: str | None = None,
     rag_context: str | None = None,
     incident_fingerprint: str = "",
+    backend: str | None = None,
+    target: str | None = None,
 ) -> dict[str, Any]:
     require_feature("langgraph_multiagent", "LangGraph multi-agent")
+
+    from codeflow.mac_bridge import resolve_target
 
     if rag_context is None:
         rag_context = _build_rag_context(
@@ -129,6 +133,20 @@ def invoke_fix(
 
     cfg = load_config()
     max_iter = int(cfg.get("limits", {}).get("max_review_iterations", 3))
+    code_backend = (backend or str((cfg.get("features") or {}).get("code_backend") or "langgraph")).strip().lower()
+    if code_backend not in ("cursor", "langgraph"):
+        raise ValueError(f"unsupported backend: {code_backend!r} (use cursor|langgraph)")
+
+    fix_target = resolve_target(
+        explicit=target,
+        request=request,
+        repo=repo,
+    )
+
+    # Cursor uses raised safety limits for the duration of this invoke.
+    features = cfg.setdefault("features", {})
+    features["code_backend"] = code_backend
+
     initial: dict[str, Any] = {
         "request": request,
         "repo": repo,
@@ -141,6 +159,8 @@ def invoke_fix(
         "db_context": db_context or "",
         "incident_fingerprint": incident_fingerprint,
         "force_push": push,
+        "code_backend": code_backend,
+        "fix_target": fix_target,
     }
     if test_cmd:
         initial["test_cmd_override"] = test_cmd
@@ -183,15 +203,28 @@ def _json_safe(final: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Orion fix runner (RAG + DB + LangGraph)")
+    parser = argparse.ArgumentParser(
+        description="Orion fix runner (RAG + DB + Cursor or LangGraph)"
+    )
     parser.add_argument("request", nargs="?", help="Natural language fix request")
-    parser.add_argument("--repo", help="REPOS subdirectory name")
+    parser.add_argument("--repo", help="REPOS subdirectory name (or Mac-only module)")
     parser.add_argument("--from-incident", dest="from_incident", help="Incident fingerprint prefix")
     parser.add_argument("--push", action="store_true", help="Push to origin/orion after commit")
     parser.add_argument("--no-rag", action="store_true", help="Skip upfront RAG queries")
     parser.add_argument("--test-cmd", help="Override test command")
     parser.add_argument("--test-file", help="Run pytest/syntax on a specific file")
     parser.add_argument("--plan", help="Existing plan under plans/ — skips Opus planner")
+    parser.add_argument(
+        "--backend",
+        choices=("cursor", "langgraph"),
+        help="Code worker backend (default: features.code_backend)",
+    )
+    parser.add_argument(
+        "--target",
+        choices=("node", "mac", "auto"),
+        default="auto",
+        help="Where Cursor runs: node REPOS, Mac Developer via SSH, or auto",
+    )
     parser.add_argument("--json", action="store_true", help="JSON output")
     args = parser.parse_args()
 
@@ -213,11 +246,23 @@ def main() -> int:
         request = args.request
         repo = args.repo
 
+    from codeflow.mac_bridge import resolve_target
+
+    fix_target = resolve_target(explicit=args.target, request=request, repo=repo)
     repo_path = repos / repo
-    if not repo_path.is_dir():
+
+    # Mac-only modules may not exist as a git checkout under Linux REPOS.
+    if fix_target == "mac" and not repo_path.is_dir():
+        repo_path = Path("/tmp/orion-mac-placeholder") / repo
+        repo_path.mkdir(parents=True, exist_ok=True)
+        if not (repo_path / ".git").exists():
+            # Minimal placeholder so invoke_fix path checks pass; real work is on Mac.
+            subprocess = __import__("subprocess")
+            subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=False)
+    elif not repo_path.is_dir():
         print(f"ERROR: repo not found: {repo_path}", file=sys.stderr)
         return 1
-    if not (repo_path / ".git").exists():
+    elif not (repo_path / ".git").exists():
         print(f"ERROR: {repo_path} is not a git repo", file=sys.stderr)
         return 1
 
@@ -232,6 +277,8 @@ def main() -> int:
             test_file=args.test_file,
             incident_fingerprint=incident_fp,
             plan_path=args.plan,
+            backend=args.backend,
+            target=args.target,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

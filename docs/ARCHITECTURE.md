@@ -53,7 +53,7 @@ Overlay discovery: `ORION_OVERLAY_ROOT` → `features.yaml` `paths.overlay_root`
 | `bin/orion-rag-index` | `rag/` | `features.rag` | Build Chroma + BM25 indexes |
 | `bin/orion-rag-query` | `rag/` | `features.rag` | Retrieval for questions |
 | `bin/orion-rag-eval` | `rag/` | `features.rag` | Recall evaluation |
-| `bin/orion-fix` | `codeflow/` | `features.langgraph_multiagent` | LangGraph auto-fix with RAG |
+| `bin/orion-fix` | `codeflow/` | `features.langgraph_multiagent` | Auto-fix via Cursor (default) or LangGraph + RAG |
 | `bin/orion-code` | `codeflow/` | `features.langgraph_multiagent` | Code worker entry |
 | `bin/orion-db` | `db/` | `features.local_mysql` | Local MySQL queries |
 | `bin/orion-incident` | `incidents/` | `features.incidents` | MCP poll, remediate, notify |
@@ -75,13 +75,17 @@ Question → intent heuristics → collection routing → vector search (optiona
 
 ```mermaid
 flowchart LR
-    Start --> Triage --> FetchRAG --> PlannerOrCoder{complexity}
+    Start --> Triage --> FetchRAG --> Backend{code_backend}
+    Backend -->|cursor| CursorAgent --> SyntaxC --> TestC --> ReviewC --> CommitC
+    Backend -->|langgraph| PlannerOrCoder{complexity}
     PlannerOrCoder -->|complex| Planner --> Coder
     PlannerOrCoder -->|simple| Coder
     Coder --> Apply --> Syntax --> TestRun --> Review
     Review -->|approved| Commit
     Review -->|retry| Coder
 ```
+
+Cursor target is `node` (local REPOS) or `mac` (SSH Developer bridge). Secrets and SSH host config stay in the overlay.
 
 ### Monitoring
 

@@ -107,3 +107,20 @@ def anthropic_api_key() -> str:
             f"ANTHROPIC_API_KEY is missing or placeholder in {ENV_PATH}"
         )
     return key
+
+
+def cursor_api_key(*, required: bool = True) -> str | None:
+    """Return CURSOR_API_KEY from overlay/repo env (never log the value)."""
+    load_config()
+    key = get_env("CURSOR_API_KEY")
+    if key:
+        key = key.strip()
+    if key:
+        return key
+    if required:
+        raise RuntimeError(
+            "CURSOR_API_KEY is missing. Set it in "
+            "$ORION_OVERLAY_ROOT/config/.env "
+            "(Cursor Dashboard -> Integrations)."
+        )
+    return None

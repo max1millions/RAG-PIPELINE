@@ -12,7 +12,10 @@ from typing import Any, TypedDict
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from codeflow.cursor_backend import build_brief, run_cursor_agent_local
 from codeflow.file_context import gather_file_context
+from codeflow.mac_bridge import resolve_target, run_cursor_agent_mac
+from codeflow.mac_ops import remote_git_commit, remote_syntax_check
 from codeflow.plan_io import read_plan, write_plan
 from codeflow.patch_apply import apply_edits
 from codeflow.test_runner import format_test_results, run_tests
@@ -57,6 +60,9 @@ class AgentState(TypedDict, total=False):
     needs_clarification: bool
     clarifying_questions: list[str]
     status: str
+    code_backend: str
+    fix_target: str
+    cursor_summary: str
 
 
 def _read_prompt(name: str) -> str:
@@ -105,6 +111,18 @@ def _llm(model: str, system: str, user: str) -> str:
 
 
 def triage_node(state: AgentState) -> AgentState:
+    """Classify complexity. Cursor backend skips Anthropic and marks complex."""
+    backend = state.get("code_backend") or str(
+        (load_config().get("features") or {}).get("code_backend") or "langgraph"
+    )
+    if backend == "cursor":
+        return {
+            **state,
+            "code_backend": "cursor",
+            "complexity": "complex",
+            "iteration": state.get("iteration", 0),
+        }
+
     cfg = load_config()
     model = cfg.get("models", {}).get("triage", "claude-sonnet-4-6")
     system = _read_prompt("triage.md")
@@ -113,8 +131,66 @@ def triage_node(state: AgentState) -> AgentState:
     parsed = _extract_json(raw)
     return {
         **state,
+        "code_backend": backend,
         "complexity": parsed.get("complexity", "complex"),
         "iteration": state.get("iteration", 0),
+    }
+
+
+def cursor_delegate_node(state: AgentState) -> AgentState:
+    """Hand the edit loop to Cursor Agent (node-local or Mac SSH bridge)."""
+    target = state.get("fix_target") or resolve_target(
+        explicit="auto",
+        request=state.get("request") or "",
+        repo=state.get("repo") or "",
+    )
+    feedback = state.get("test_feedback") or state.get("review_feedback") or ""
+    if target == "mac":
+        result = run_cursor_agent_mac(
+            request=state["request"],
+            repo=state["repo"],
+            rag_context=state.get("rag_context") or "",
+            db_context=state.get("db_context") or "",
+            plan=state.get("plan") or "",
+            test_feedback=feedback,
+        )
+        repo_path = result.get("repo_path") or state.get("repo_path")
+    else:
+        repo_path = state["repo_path"]
+        brief = build_brief(
+            request=state["request"],
+            repo=state["repo"],
+            repo_path=str(repo_path),
+            rag_context=state.get("rag_context") or "",
+            db_context=state.get("db_context") or "",
+            plan=state.get("plan") or "",
+            test_feedback=feedback,
+            target="node",
+        )
+        result = run_cursor_agent_local(brief=brief, cwd=Path(repo_path))
+
+    changed = list(result.get("changed_files") or [])
+    commit_message = str(result.get("commit_message") or "") or state["request"][:72]
+    coder_output = {"edits": [], "commit_message": commit_message}
+    if not result.get("ok"):
+        return {
+            **state,
+            "fix_target": target,
+            "repo_path": str(repo_path),
+            "changed_files": changed,
+            "coder_output": coder_output,
+            "cursor_summary": str(result.get("summary") or "")[:4000],
+            "error": str(result.get("error") or "cursor agent failed"),
+            "approved": False,
+        }
+    return {
+        **state,
+        "fix_target": target,
+        "repo_path": str(repo_path),
+        "changed_files": changed,
+        "coder_output": coder_output,
+        "cursor_summary": str(result.get("summary") or "")[:4000],
+        "error": "",
     }
 
 
@@ -339,6 +415,17 @@ def apply_changes_node(state: AgentState) -> AgentState:
 
 
 def syntax_check_node(state: AgentState) -> AgentState:
+    if state.get("fix_target") == "mac":
+        result = remote_syntax_check(
+            str(state.get("repo_path") or ""),
+            list(state.get("changed_files") or []),
+        )
+        return {
+            **state,
+            "syntax_results": result.get("syntax_results") or "",
+            "approved": bool(result.get("passed")),
+        }
+
     repo_path = Path(state["repo_path"])
     cfg = load_config()
     timeout = int(cfg.get("limits", {}).get("subprocess_timeout_s", 120))
@@ -371,12 +458,12 @@ def syntax_check_node(state: AgentState) -> AgentState:
 
     syntax = "\n".join(results)
     failed = any("FAIL" in r or "TIMEOUT" in r for r in results)
-    
+
     # Do not overwrite a prior rejection (e.g. from coder error) if there were no checks
     new_approved = state.get("approved", True)
     if results:
         new_approved = not failed
-        
+
     return {**state, "syntax_results": syntax, "approved": new_approved}
 
 
@@ -394,6 +481,15 @@ def test_run_node(state: AgentState) -> AgentState:
             "test_results": "skipped (syntax failed)",
             "test_passed": False,
             "test_feedback": state.get("syntax_results", ""),
+        }
+
+    # Mac bridge: syntax is the gate; full repo_tests.yaml may not exist remotely.
+    if state.get("fix_target") == "mac":
+        return {
+            **state,
+            "test_results": "skipped (mac bridge — syntax only)",
+            "test_passed": True,
+            "approved": True,
         }
 
     repo_path = Path(state["repo_path"])
@@ -457,11 +553,51 @@ def _git_diff_snippet(repo_path: Path, *, max_chars: int = 2000) -> str:
 
 def review_node(state: AgentState) -> AgentState:
     cfg = load_config()
-    model = cfg.get("models", {}).get("triage", "claude-sonnet-4-6")
-    system = _read_prompt("review.md")
+    backend = state.get("code_backend") or str(
+        (cfg.get("features") or {}).get("code_backend") or "langgraph"
+    )
 
     syntax_failed = state.get("syntax_results") and "FAIL" in state["syntax_results"]
     tests_failed = state.get("test_passed") is False
+
+    # Cursor path: Orion gates on syntax/tests only (no Anthropic review LLM).
+    if backend == "cursor":
+        if state.get("error") and not state.get("changed_files"):
+            iteration = state.get("iteration", 0) + 1
+            return {
+                **state,
+                "approved": False,
+                "review_feedback": str(state.get("error") or "")[:4000],
+                "test_feedback": str(state.get("error") or "")[:4000],
+                "iteration": iteration,
+                "replan": False,
+            }
+        if syntax_failed or tests_failed:
+            iteration = state.get("iteration", 0) + 1
+            feedback_parts = []
+            if syntax_failed:
+                feedback_parts.append(state.get("syntax_results", ""))
+            if tests_failed:
+                feedback_parts.append(state.get("test_results", ""))
+            combined = "\n\n".join(feedback_parts)
+            return {
+                **state,
+                "approved": False,
+                "review_feedback": combined[:4000],
+                "test_feedback": combined[:4000],
+                "iteration": iteration,
+                "replan": False,
+            }
+        return {
+            **state,
+            "approved": True,
+            "review_feedback": state.get("cursor_summary") or "cursor edits validated",
+            "iteration": state.get("iteration", 0),
+            "replan": False,
+        }
+
+    model = cfg.get("models", {}).get("triage", "claude-sonnet-4-6")
+    system = _read_prompt("review.md")
 
     if syntax_failed or tests_failed or state.get("error"):
         iteration = state.get("iteration", 0) + 1
@@ -583,6 +719,25 @@ def _create_pr(repo_path: Path, repo: str, state: AgentState, timeout: int) -> s
 
 
 def git_commit_node(state: AgentState) -> AgentState:
+    if state.get("fix_target") == "mac":
+        msg = (state.get("coder_output") or {}).get("commit_message") or state["request"][:72]
+        result = remote_git_commit(
+            workdir=str(state.get("repo_path") or ""),
+            commit_message=str(msg),
+            force_push=bool(state.get("force_push")),
+            request=state.get("request") or "",
+            repo=state.get("repo") or "",
+        )
+        return {
+            **state,
+            "commit_sha": result.get("commit_sha") or "",
+            "pushed": bool(result.get("pushed")),
+            "pr_url": result.get("pr_url") or "",
+            "summary": result.get("summary") or result.get("error") or "",
+            "error": "" if result.get("ok") else str(result.get("error") or ""),
+            "approved": bool(result.get("ok")),
+        }
+
     repo_path = Path(state["repo_path"])
     cfg = load_config()
     timeout = int(cfg.get("limits", {}).get("subprocess_timeout_s", 120))

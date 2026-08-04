@@ -44,7 +44,8 @@ See [README.md](../README.md#automatic-reindexing).
 |----------|---------|
 | `ORION_OVERLAY_ROOT` | Overlay directory |
 | `ORION_RAG_HYBRID` | Force BM25+vector hybrid |
-| `ANTHROPIC_API_KEY` | Claude (overlay `.env`) |
+| `ANTHROPIC_API_KEY` | Claude LangGraph fallback (overlay `.env`) |
+| `CURSOR_API_KEY` | Cursor Agent for `orion-fix --backend=cursor` |
 | `MYSQL_*` | Local MySQL |
 | `OPENCLAW_TOKEN` | iMessage notify (cron) |
 

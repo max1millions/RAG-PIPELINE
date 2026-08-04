@@ -45,8 +45,13 @@ def check_diff(repo_path: Path, *, env: dict[str, str] | None = None) -> dict[st
     """Return {passed: bool, reasons: list[str], ...}."""
     cfg = load_config()
     limits = cfg.get("limits") or {}
-    max_ins = int(limits.get("max_diff_insertions", 50))
-    max_del = int(limits.get("max_diff_deletions", 20))
+    backend = str((cfg.get("features") or {}).get("code_backend") or "langgraph")
+    if backend == "cursor":
+        max_ins = int(limits.get("cursor_max_diff_insertions", 500))
+        max_del = int(limits.get("cursor_max_diff_deletions", 500))
+    else:
+        max_ins = int(limits.get("max_diff_insertions", 50))
+        max_del = int(limits.get("max_diff_deletions", 20))
     patterns = [str(p) for p in (limits.get("forbidden_path_patterns") or [])]
 
     git_env = env or {}
