@@ -27,6 +27,12 @@ _TOOL_ACTIONS: dict[str, str] = {
     "cwr_test_generate": "CWR test file generation",
     "cisnet_run_pipeline": "CIS-Net pipeline",
     "cisnet_mlc_automation": "MLC portal automation",
+    "cron_update_popularity_score": "popularity score update",
+    "cron_email_reader": "email reader",
+    "cron_run_cron_job": "cron job runner",
+    "cron_sync_backup": "backup sync",
+    "cron_pull_all": "repo pull-all",
+    "api_gateway": "API gateway",
 }
 
 
@@ -74,12 +80,14 @@ def format_message(record: dict[str, Any]) -> str:
     module = str(record.get("module") or "")
     kind = str(record.get("kind") or record.get("severity") or "error")
     raw_message = str(record.get("message") or "")
+    host = str(record.get("host") or "")
 
     cfg = load_incidents_config()
     greeting = str(cfg.get("message_greeting") or "Orion:")
     action = _tool_to_action(tool, module)
     error = _humanize_error(raw_message, kind, record.get("returncode"))
-    text = f"{greeting} {action} failed — {error} (ref {fp})"
+    host_note = "Mac: " if host == "mac" else ""
+    text = f"{greeting} {host_note}{action} failed — {error} (ref {fp})"
     return text[:320]
 
 

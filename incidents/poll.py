@@ -27,7 +27,8 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
         return {
             "ok": True,
             "dry_run": dry_run,
-            "skipped": True,
+            "skipped": [],
+            "poll_disabled": True,
             "reason": "incidents_poll_disabled",
             "fetched": 0,
             "processed": 0,
@@ -106,7 +107,16 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
             result["skipped"].append({"fingerprint": fp[:8], "reason": reason})
             continue
 
-        if auto_fix and reason in ("new", "reopened"):
+        tool = str(record.get("tool") or "")
+        mac_notify_only = (
+            record.get("host") == "mac"
+            or tool.startswith("cron_")
+            or tool == "api_gateway"
+        )
+        would_auto_fix = auto_fix and reason in ("new", "reopened")
+
+        # Mac / cron / API gateway: notify-only (no Cursor remediation on Mac Mini).
+        if would_auto_fix and not mac_notify_only:
             if dry_run:
                 result["remediated"].append(
                     {"fingerprint": fp[:8], "reason": reason, "detail": "DRY-RUN would auto-fix"}
@@ -125,6 +135,10 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
                 result["errors"].append(
                     f"remediate {fp[:8]}: {fix_result.get('error', 'unknown')}"
                 )
+            continue
+
+        if would_auto_fix and mac_notify_only and not notify:
+            result["skipped"].append({"fingerprint": fp[:8], "reason": "mac_notify_only"})
             continue
 
         if not notify:

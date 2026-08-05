@@ -29,11 +29,14 @@ def cmd_poll(args: argparse.Namespace) -> int:
     else:
         if not result.get("ok"):
             print(f"ERROR: {result.get('errors')}", file=sys.stderr)
+        skipped = result.get("skipped") or []
+        if not isinstance(skipped, list):
+            skipped = []
         print(
             f"Fetched {result.get('fetched')} processed {result.get('processed')} "
             f"notified {len(result.get('notified') or [])} "
             f"remediated {len(result.get('remediated') or [])} "
-            f"skipped {len(result.get('skipped') or [])}"
+            f"skipped {len(skipped)}"
         )
         for item in result.get("remediated") or []:
             print(f"  FIX {item.get('fingerprint')} ({item.get('reason')}): {item.get('detail')}")

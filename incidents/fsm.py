@@ -119,6 +119,7 @@ def upsert_from_mac(
             "detected_at": normalized.get("detected_at") or now,
             "updated_at": now,
             "source": normalized.get("source"),
+            "host": normalized.get("host") or "mac",
             "tool": normalized.get("tool"),
             "module": normalized.get("module"),
             "repos_name": normalized.get("repos_name"),
@@ -140,6 +141,8 @@ def upsert_from_mac(
     existing["updated_at"] = now
     existing["message"] = normalized.get("message") or existing.get("message")
     existing["mac_payload"] = normalized.get("mac_payload")
+    if normalized.get("host"):
+        existing["host"] = normalized.get("host")
     return existing, notify, reason
 
 

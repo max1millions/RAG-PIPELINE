@@ -75,11 +75,21 @@ def normalize_mac_row(row: dict[str, Any]) -> dict[str, Any]:
     kind = str(row.get("kind") or "nonzero_exit")
     fp = compute_fingerprint(row)
 
+    tool = str(row.get("tool") or "")
+    if tool.startswith("cron_"):
+        source = "cron"
+    elif tool == "api_gateway":
+        source = "api_gateway"
+    else:
+        source = "mcp_tool"
+    host = str(row.get("host") or "mac")
+
     return {
         "fingerprint": fp,
         "detected_at": str(row.get("ts") or ""),
-        "source": "mcp_tool",
-        "tool": str(row.get("tool") or ""),
+        "source": source,
+        "host": host,
+        "tool": tool,
         "module": module,
         "repos_name": repos_name,
         "repos_rel_path": _repos_rel_path(

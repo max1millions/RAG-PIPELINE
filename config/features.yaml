@@ -7,15 +7,15 @@ features:
   local_mysql: true
   incidents: true
   # Incident automation (cron: install-incident-cron.sh). Manual CLI always works when incidents: true.
-  incidents_poll: false       # false = cron poll is a no-op (no MCP fetch, notify, or auto-fix)
-  incidents_notify: false     # false = no BlueBubbles/iMessage alerts on new failures
-  auto_fix_incidents: false   # false = do not auto-run orion-fix on poll
+  incidents_poll: true        # cron poll: MCP fetch + notify (Mac = notify-only)
+  incidents_notify: true      # BlueBubbles/iMessage alerts on new failures
+  auto_fix_incidents: false   # KEEP OFF — Mac incidents are notify-only
   auto_push_orion: true
   auto_pr: true
   local_web: true
   watchdog: true
   watchdog_notify: true
-  watchdog_auto_fix: false
+  watchdog_auto_fix: false   # KEEP OFF
   # Opus may exit with clarifying questions instead of coding (interactive chat only).
   planner_clarification: true
   # Default code-change worker: cursor (delegated loop) or langgraph (Opus/Sonnet).

@@ -48,6 +48,17 @@ def remediate_record(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     fp = str(record.get("fingerprint") or "")
+    tool = str(record.get("tool") or "")
+    if (
+        record.get("host") == "mac"
+        or tool.startswith("cron_")
+        or tool == "api_gateway"
+    ):
+        return {
+            "ok": False,
+            "error": "mac-origin incidents are notify-only (no Cursor on Mac Mini)",
+            "fingerprint": fp[:8],
+        }
     repos_name = str(record.get("repos_name") or "")
     if not repos_name or repos_name == "UNKNOWN":
         return {"ok": False, "error": "no repos_name on incident", "fingerprint": fp[:8]}
