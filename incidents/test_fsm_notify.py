@@ -120,7 +120,7 @@ class MessageFromStdioTests(unittest.TestCase):
             "2026-08-06 02:01:16  ERROR     Failed to connect to database.\n"
         )
         stderr = (
-            "/Users/origin/.venvs/fastmcp/lib/python3.14/site-packages/requests/"
+            "/Users/YOU/.venvs/fastmcp/lib/python3.14/site-packages/requests/"
             "__init__.py:113: RequestsDependencyWarning: urllib3 ...\n"
             "  warnings.warn(\n"
         )

@@ -26,14 +26,38 @@ _build_excludes() {
   echo "${args[@]}"
 }
 
+# Drop known-safe placeholders / documentation examples from hits.
+_filter_allowlist() {
+  grep -vE \
+    -e 'scripts/audit-before-publish\.sh:' \
+    -e 'SECURITY\.md:' \
+    -e '/Users/YOU(/|$|[^a-zA-Z])' \
+    -e '/Users/YOUR_USER(/|$|[^a-zA-Z])' \
+    -e '/home/YOUR_USER(/|$|[^a-zA-Z])' \
+    -e '\+15551234567' \
+    -e '\+1XXXXXXXXXX' \
+    -e 'sk-ant-api0[0-9]-REPLACE' \
+    -e 'whsec_test[A-Za-z0-9]+' \
+    -e 'SECURE_PASSWORD' \
+    || true
+}
+
 _grep() {
   local label="$1"
   local pattern="$2"
   shift 2
   local excludes
   read -ra excludes <<< "$(_build_excludes)"
-  # shellcheck disable=SC2086
-  if grep -rn --include="$@" "${excludes[@]}" -E "$pattern" "$ROOT" 2>/dev/null; then
+  local includes=()
+  local glob
+  for glob in "$@"; do
+    includes+=(--include="$glob")
+  done
+
+  local hits
+  hits="$(grep -rn "${includes[@]}" "${excludes[@]}" -E "$pattern" "$ROOT" 2>/dev/null | _filter_allowlist || true)"
+  if [[ -n "$hits" ]]; then
+    echo "$hits"
     echo "FAIL: $label" >&2
     FAIL=1
   else
@@ -45,26 +69,26 @@ echo "=== Orion audit-before-publish ==="
 echo "Root: $ROOT"
 echo ""
 
-# Phone numbers (E.164 format: +1XXXXXXXXXX or raw 10-digit US)
-_grep "phone numbers" '\+1[0-9]{10}|[0-9]{10}' "*.yaml" "*.yml" "*.py" "*.sh" "*.md" "*.txt"
+# Phone numbers (E.164 US). Avoid bare [0-9]{10} — too many timestamp/version FPs.
+_grep "phone numbers" '\+1[0-9]{10}' "*.yaml" "*.yml" "*.py" "*.sh" "*.md" "*.txt"
 
 # Personal emails (non-placeholder patterns)
 _grep "personal/production emails" '[a-zA-Z0-9._%+-]+@(rightstune|example-private|yourcompany)\.(com|io|net)' "*.yaml" "*.yml" "*.py" "*.sh" "*.md"
 
-# Mac/Windows absolute production paths
+# Mac absolute production paths (placeholders /Users/YOU and /Users/YOUR_USER allowed)
 _grep "Mac production paths (/Users/)" '/Users/[a-zA-Z]' "*.yaml" "*.yml" "*.py" "*.sh" "*.md" "*.txt"
 
-# Anthropic API keys
-_grep "Anthropic API keys" 'sk-ant-api0[0-9]-[A-Za-z0-9_-]{10,}' "*.yaml" "*.yml" "*.py" "*.sh" "*.env" "*.json" "*.txt" "*.md"
+# Anthropic API keys (placeholder sk-ant-api03-REPLACE* allowed)
+_grep "Anthropic API keys" 'sk-ant-api0[0-9]-[A-Za-z0-9_-]{10,}' "*.yaml" "*.yml" "*.py" "*.sh" "*.env" "*.env.example" "*.json" "*.txt" "*.md"
 
-# Stripe live/webhook secrets
-_grep "Stripe live keys" 'sk_live_[A-Za-z0-9]{10,}' "*.yaml" "*.yml" "*.py" "*.sh" "*.env" "*.json" "*.txt" "*.md" "*.php"
-_grep "Stripe webhook secrets" 'whsec_[A-Za-z0-9]{10,}' "*.yaml" "*.yml" "*.py" "*.sh" "*.env" "*.json" "*.txt" "*.md" "*.php"
+# Stripe live/webhook secrets (synthetic whsec_test* in smoke tests allowed)
+_grep "Stripe live keys" 'sk_live_[A-Za-z0-9]{10,}' "*.yaml" "*.yml" "*.py" "*.sh" "*.env" "*.env.example" "*.json" "*.txt" "*.md" "*.php"
+_grep "Stripe webhook secrets" 'whsec_[A-Za-z0-9]{10,}' "*.yaml" "*.yml" "*.py" "*.sh" "*.env" "*.env.example" "*.json" "*.txt" "*.md" "*.php"
 
 # AWS keys
-_grep "AWS access keys" 'AKIA[0-9A-Z]{16}' "*.yaml" "*.yml" "*.py" "*.sh" "*.env" "*.json" "*.txt" "*.md"
+_grep "AWS access keys" 'AKIA[0-9A-Z]{16}' "*.yaml" "*.yml" "*.py" "*.sh" "*.env" "*.env.example" "*.json" "*.txt" "*.md"
 
-# NVM paths
+# NVM paths (placeholder /home/YOUR_USER/.nvm/... allowed)
 _grep ".nvm paths" '\.nvm/versions/node' "*.yaml" "*.yml" "*.py" "*.sh" "*.md"
 
 # SQL dump files (anything other than provision.sql)
