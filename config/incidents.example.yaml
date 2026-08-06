@@ -25,7 +25,7 @@ poll_limit: 50
 mcp_server: YOUR_MCP_SERVER_NAME
 
 # Name of the MCP tool that returns recent errors (server-specific).
-mcp_tool: get_recent_errors
+mcp_tool: rightstune_get_recent_errors
 
 mcp_timeout_s: 30
 
