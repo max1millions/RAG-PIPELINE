@@ -20,6 +20,16 @@ def _severity(kind: str) -> str:
     return "error"
 
 
+_LOG_PREFIX = re.compile(
+    r"^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\w+\s+"
+)
+_WARNINGISH = re.compile(
+    r"(?i)(warnings?\.warn|DeprecationWarning|FutureWarning|"
+    r"RequestsDependencyWarning|UserWarning|InsecureRequestWarning)"
+)
+_ERRORISH = re.compile(r"(?i)\b(error|failed|exception|traceback)\b")
+
+
 def _message_from_stderr(stderr: str) -> str:
     lines = [ln.strip() for ln in stderr.splitlines() if ln.strip()]
     if not lines:
@@ -29,6 +39,27 @@ def _message_from_stderr(stderr: str) -> str:
             continue
         return ln[:240]
     return lines[-1][:240]
+
+
+def _message_from_stdio(stdout: str, stderr: str) -> str:
+    """Prefer real failure text over dependency Warnings.warn noise in stderr."""
+    stderr_msg = _message_from_stderr(stderr) if stderr.strip() else ""
+    if (
+        stderr_msg
+        and stderr_msg != "(no stderr)"
+        and not _WARNINGISH.search(stderr_msg)
+    ):
+        return stderr_msg
+
+    for ln in reversed([line.strip() for line in stdout.splitlines() if line.strip()]):
+        if not _ERRORISH.search(ln):
+            continue
+        cleaned = _LOG_PREFIX.sub("", ln).strip()
+        return (cleaned or ln)[:240]
+
+    if stderr_msg and stderr_msg != "(no stderr)":
+        return stderr_msg
+    return "(no stderr)"
 
 
 def _repos_rel_path(
@@ -72,6 +103,7 @@ def normalize_mac_row(row: dict[str, Any]) -> dict[str, Any]:
     repos_name = str(module_cfg.get("repos_name") or module or "UNKNOWN")
 
     stderr = str(row.get("stderr") or "")
+    stdout = str(row.get("stdout") or "")
     kind = str(row.get("kind") or "nonzero_exit")
     fp = compute_fingerprint(row)
 
@@ -102,7 +134,7 @@ def normalize_mac_row(row: dict[str, Any]) -> dict[str, Any]:
         "severity": _severity(kind),
         "kind": kind,
         "returncode": row.get("returncode"),
-        "message": _message_from_stderr(stderr),
+        "message": _message_from_stdio(stdout, stderr),
         "stack_trace": stderr if "Traceback" in stderr else "",
         "raw_stderr_tail": stderr,
         "mac_payload": row,

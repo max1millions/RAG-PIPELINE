@@ -9,8 +9,8 @@ from incidents.fsm import (
     load_active,
     load_state,
     mark_escalated,
+    mark_notified,
     mark_notifying,
-    mark_resolved,
     save_active,
     save_state,
     upsert_from_mac,
@@ -149,8 +149,9 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
             mark_notifying(record)
         ok, detail = send_notifications(record, dry_run=dry_run)
         if ok:
+            # NOTIFIED (not RESOLVED): same Mac jsonl row must not re-open every poll.
             if not dry_run:
-                mark_resolved(record)
+                mark_notified(record)
             result["notified"].append(
                 {
                     "fingerprint": fp[:8],

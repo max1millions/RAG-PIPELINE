@@ -129,7 +129,7 @@ def main() -> int:
 
     p_list = sub.add_parser("list", help="List tracked incidents")
     p_list.add_argument("--state", choices=[
-        "DETECTED", "NOTIFYING", "RESOLVED", "ESCALATED",
+        "DETECTED", "NOTIFYING", "NOTIFIED", "RESOLVED", "ESCALATED",
         "FIXING", "TESTING", "PUSHING", "FIXED", "FIX_FAILED",
     ])
     p_list.add_argument("--json", action="store_true")
