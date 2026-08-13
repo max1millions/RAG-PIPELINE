@@ -55,7 +55,7 @@ Simple LangGraph tasks skip the planner. **Safety gate** before commit: max diff
 
 Both share the incident FSM for dedupe and notification. **`notify_backend: log`** is the OSS default (stdout only); operators enable BlueBubbles/iMessage in overlay config.
 
-Automation (`incidents_poll`, `auto_fix_incidents`, `watchdog_auto_fix`, etc.) defaults **off** in public `features.yaml` — enable explicitly in overlay. Watchdog Phase 4b dual-gates code (`mode: code` → RAG/`orion-fix`) or SQL (`fix_sql_file`) remediations behind `watchdog_auto_fix` plus per-check `auto_fix.enabled`; manual `orion-watchdog remediate` stays available when the parent `watchdog` feature is on.
+Automation (`incidents_poll`, `auto_fix_incidents`, `watchdog_auto_fix`, etc.) defaults **off** in public `features.yaml` — enable explicitly in overlay. **Incident iMessages:** every new/reopened Mac incident is LLM-interpreted from the recorded stdio stream (`incidents/interpret.py`) into `code` vs `host`. Auto-fix stays off in public `features.yaml`. Overlay may set `cwr_auto_fix_incidents` so CWR-INTERFACE `code` bugs get `orion-fix` on the Linux clone; `host` issues stay notify-only. Greeting text comes from overlay `incidents.yaml` → `message_greeting`. Watchdog Phase 4b dual-gates code (`mode: code` → RAG/`orion-fix`) or SQL (`fix_sql_file`) remediations behind `watchdog_auto_fix` plus per-check `auto_fix.enabled`; manual `orion-watchdog remediate` stays available when the parent `watchdog` feature is on.
 
 ## 6. RightsTune as portfolio deployment
 

@@ -16,6 +16,12 @@ from incidents.fsm import (
     upsert_from_mac,
 )
 from incidents.ingest import normalize_mac_row
+from incidents.interpret import (
+    interpret_incident,
+    is_cwr_code_fix,
+    mac_notify_only,
+    with_fixing_clause,
+)
 from incidents.mcp_client import fetch_recent_errors_sync
 from incidents.notify import send_notifications
 from incidents.remediate import remediate_record
@@ -44,6 +50,7 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
     renotify_every = int(cfg.get("dedupe_renotify_every") or 10)
     renotify_hours = int(cfg.get("dedupe_renotify_hours") or 24)
     auto_fix = feature_enabled("auto_fix_incidents") and not dry_run
+    cwr_auto_fix = feature_enabled("cwr_auto_fix_incidents")
     notify = feature_enabled("incidents_notify") and not dry_run
 
     active = load_active()
@@ -52,6 +59,7 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
         "ok": True,
         "dry_run": dry_run,
         "auto_fix": auto_fix,
+        "cwr_auto_fix": cwr_auto_fix,
         "notify": notify,
         "fetched": 0,
         "processed": 0,
@@ -88,7 +96,7 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
         if not isinstance(row, dict):
             continue
         normalized = normalize_mac_row(row)
-        
+
         # Ignore CMRRA generation timeouts since it is a known long-running background task
         if normalized.get("tool") == "cwr_generate_cmrra" and normalized.get("kind") == "timeout":
             result["skipped"].append({"fingerprint": normalized["fingerprint"][:8], "reason": "ignored_cmrra_timeout"})
@@ -107,16 +115,70 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
             result["skipped"].append({"fingerprint": fp[:8], "reason": reason})
             continue
 
-        tool = str(record.get("tool") or "")
-        mac_notify_only = (
-            record.get("host") == "mac"
-            or tool.startswith("cron_")
-            or tool == "api_gateway"
-        )
+        interp = interpret_incident(record)
+        record["fix_target"] = interp["fix_target"]
+        record["user_message"] = interp["user_message"]
+
         would_auto_fix = auto_fix and reason in ("new", "reopened")
+        cwr_fix = (
+            is_cwr_code_fix(record)
+            and cwr_auto_fix
+            and reason in ("new", "reopened")
+        )
+        notify_only = mac_notify_only(record)
+
+        if cwr_fix:
+            record["user_message"] = with_fixing_clause(record["user_message"])
+            if notify or dry_run:
+                if not dry_run:
+                    mark_notifying(record)
+                ok, detail = send_notifications(record, dry_run=dry_run)
+                if ok:
+                    if not dry_run:
+                        mark_notified(record)
+                    result["notified"].append(
+                        {
+                            "fingerprint": fp[:8],
+                            "reason": reason,
+                            "detail": detail,
+                            "fix_target": interp["fix_target"],
+                        }
+                    )
+                else:
+                    if not dry_run:
+                        mark_escalated(record, detail)
+                    result["errors"].append(f"notify {fp[:8]}: {detail}")
+                    continue
+            if dry_run:
+                result["remediated"].append(
+                    {
+                        "fingerprint": fp[:8],
+                        "reason": reason,
+                        "detail": "DRY-RUN would orion-fix CWR-INTERFACE",
+                        "fix_target": interp["fix_target"],
+                    }
+                )
+                continue
+            fix_result = remediate_record(
+                record, push=feature_enabled("auto_push_orion")
+            )
+            if fix_result.get("ok"):
+                result["remediated"].append(
+                    {
+                        "fingerprint": fp[:8],
+                        "reason": reason,
+                        "detail": fix_result.get("summary") or fix_result.get("pr_url"),
+                        "fix_target": interp["fix_target"],
+                    }
+                )
+            else:
+                result["errors"].append(
+                    f"remediate {fp[:8]}: {fix_result.get('error', 'unknown')}"
+                )
+            continue
 
         # Mac / cron / API gateway: notify-only (no Cursor remediation on Mac Mini).
-        if would_auto_fix and not mac_notify_only:
+        if would_auto_fix and not notify_only:
             if dry_run:
                 result["remediated"].append(
                     {"fingerprint": fp[:8], "reason": reason, "detail": "DRY-RUN would auto-fix"}
@@ -137,7 +199,7 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
                 )
             continue
 
-        if would_auto_fix and mac_notify_only and not notify:
+        if would_auto_fix and notify_only and not notify:
             result["skipped"].append({"fingerprint": fp[:8], "reason": "mac_notify_only"})
             continue
 
@@ -157,6 +219,7 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
                     "fingerprint": fp[:8],
                     "reason": reason,
                     "detail": detail,
+                    "fix_target": interp["fix_target"],
                 }
             )
         else:

@@ -16,6 +16,7 @@ from incidents.fsm import (
     mark_testing,
     save_active,
 )
+from incidents.interpret import mac_notify_only
 from incidents.notify import send_fix_notification
 from incidents.settings import load_path_map
 
@@ -48,12 +49,7 @@ def remediate_record(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     fp = str(record.get("fingerprint") or "")
-    tool = str(record.get("tool") or "")
-    if (
-        record.get("host") == "mac"
-        or tool.startswith("cron_")
-        or tool == "api_gateway"
-    ):
+    if mac_notify_only(record):
         return {
             "ok": False,
             "error": "mac-origin incidents are notify-only (no Cursor on Mac Mini)",

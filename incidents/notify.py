@@ -32,6 +32,13 @@ _TOOL_ACTIONS: dict[str, str] = {
     "cron_run_cron_job": "cron job runner",
     "cron_sync_backup": "backup sync",
     "cron_pull_all": "repo pull-all",
+    "cron_lod_pending_check": "pending LOD check",
+    "cron_cwr_auto_submit": "weekly CWR submit",
+    "cron_cwr_generate": "CWR file generation",
+    "cron_cwr_dispatch": "CWR SFTP dispatch",
+    "cron_cwr_auto_acks": "hourly CWR ACK poll",
+    "cron_cwr_retrieve": "CWR SFTP retrieve",
+    "cron_cwr_process_acks": "CWR acknowledgement processing",
     "api_gateway": "API gateway",
 }
 
@@ -76,14 +83,22 @@ def _humanize_error(message: str, kind: str, returncode: Any) -> str:
 
 def format_message(record: dict[str, Any]) -> str:
     fp = str(record.get("fingerprint") or "")[:8]
+    custom = str(record.get("user_message") or "").strip()
+    if custom:
+        text = custom
+        if fp and "(ref " not in text:
+            text = f"{text.rstrip('.')} (ref {fp})."
+        return text[:480]
+
     tool = str(record.get("tool") or "")
     module = str(record.get("module") or "")
     kind = str(record.get("kind") or record.get("severity") or "error")
     raw_message = str(record.get("message") or "")
     host = str(record.get("host") or "")
 
-    cfg = load_incidents_config()
-    greeting = str(cfg.get("message_greeting") or "Orion:")
+    from incidents.interpret import operator_greeting
+
+    greeting = operator_greeting()
     action = _tool_to_action(tool, module)
     error = _humanize_error(raw_message, kind, record.get("returncode"))
     host_note = "Mac: " if host == "mac" else ""
@@ -159,8 +174,28 @@ def format_fix_message(
     fp = str(record.get("fingerprint") or "")[:8]
     tool = str(record.get("tool") or "")
     module = str(record.get("module") or "")
-    action = _tool_to_action(tool, module)
+    from incidents.interpret import FIX_CODE, is_cwr_automation, operator_greeting
 
+    greet = operator_greeting()
+    if is_cwr_automation(record) or str(record.get("fix_target") or "") in (FIX_CODE, "cwr_module"):
+        extra = ""
+        if success and pr_url and pr_url.startswith("http"):
+            extra = f" PR: {pr_url}"
+        elif detail:
+            extra = f" {detail[:140].rstrip('.')}"
+        if success:
+            text = (
+                f"{greet} I finished fixing that issue.{extra} "
+                f"It'll land on the production Mac on the next git pull (ref {fp})."
+            )
+        else:
+            text = (
+                f"{greet} I couldn't finish the fix automatically.{extra} "
+                f"You'll want to look at this when you can (ref {fp})."
+            )
+        return text[:480]
+
+    action = _tool_to_action(tool, module)
     if success:
         text = f"Fixed {action} (ref {fp}). Tests passed."
         if pr_url and pr_url.startswith("http"):

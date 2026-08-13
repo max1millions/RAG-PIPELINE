@@ -7,9 +7,10 @@ features:
   local_mysql: true
   incidents: true
   # Incident automation (cron: install-incident-cron.sh). Manual CLI always works when incidents: true.
-  incidents_poll: true        # cron poll: MCP fetch + notify (Mac = notify-only)
+  incidents_poll: true        # cron poll: MCP fetch + notify
   incidents_notify: true      # BlueBubbles/iMessage alerts on new failures
-  auto_fix_incidents: false   # KEEP OFF — Mac incidents are notify-only
+  auto_fix_incidents: false   # KEEP OFF — generic Mac incidents stay notify-only
+  cwr_auto_fix_incidents: false  # CWR-INTERFACE code bugs: enable in private overlay
   auto_push_orion: true
   auto_pr: true
   local_web: true
