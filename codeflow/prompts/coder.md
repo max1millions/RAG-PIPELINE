@@ -27,7 +27,8 @@ Implement the plan by returning JSON only:
 
 Rules:
 - Use `replace` for existing files — never return full existing file content.
-- Copy `old_str` exactly from the Target files section (including whitespace and line breaks).
+- Copy `old_str` exactly from the Target files section (including whitespace and line breaks). Do **not** invent `old_str` when a Target files block is missing or says files were omitted.
+- If Target files lacks a path you must edit, return `{"error":"missing target file content for <path> — re-run with explicit paths"}` instead of guessing.
 - `old_str` must match exactly once; include enough surrounding lines to be unique.
 - Use `create` only for brand-new files; use `delete` to remove files.
 - Multiple `replace` edits on the same file are applied in array order.

@@ -107,6 +107,35 @@ class FileContextTests(unittest.TestCase):
         )
         self.assertIn("phase3.py", paths)
 
+    def test_discover_html_and_css_paths(self) -> None:
+        paths = discover_paths(
+            request=(
+                "Fix duplicate Instagram text in feedback.html and "
+                "update styles in assets/site.css"
+            ),
+            plan="Also touch cancellation_policy.html",
+            rag_context="",
+        )
+        self.assertIn("feedback.html", paths)
+        self.assertIn("assets/site.css", paths)
+        self.assertIn("cancellation_policy.html", paths)
+
+    def test_gather_includes_html_file_body(self) -> None:
+        (self.repo / "feedback.html").write_text(
+            "<div>max@rightstune.com</div>\n",
+            encoding="utf-8",
+        )
+        ctx = gather_file_context(
+            repo_path=self.repo,
+            request="Update feedback.html contact line",
+            plan="",
+            rag_context="",
+            max_file_chars=8000,
+            max_total_chars=40000,
+        )
+        self.assertIn("feedback.html", ctx)
+        self.assertIn("max@rightstune.com", ctx)
+
     def test_gather_includes_line_numbers(self) -> None:
         ctx = gather_file_context(
             repo_path=self.repo,

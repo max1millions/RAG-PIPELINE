@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 _PATH_EXT_RE = re.compile(
-    r"(?:^|[\s`'\"(])([\w./-]+\.(?:py|sh|php|sql|yaml|yml|json|md|txt|js|ts))(?:[\s`'\",):]|$)",
+    r"(?:^|[\s`'\"(])([\w./-]+\.(?:py|sh|php|html|htm|css|sql|yaml|yml|json|md|txt|js|ts))(?:[\s`'\",):]|$)",
     re.IGNORECASE,
 )
 _RAG_HEADER_RE = re.compile(
