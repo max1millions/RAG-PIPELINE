@@ -1,7 +1,8 @@
 """LLM interpretation of production incident streams for iMessage.
 
 Every Mac incident (cron, MCP, API gateway) is classified from the recorded
-stdio stream:
+stdio stream. Known ops failures (pull-all, disk, MySQL, backup, API gateway)
+use a programmed iMessage template and skip the LLM. Everything else:
 
 - ``code`` — application/repo bug (traceback, validator, logic error).
 - ``host`` — environment (network, auth, disk, database, missing credentials, OS).
@@ -18,6 +19,8 @@ import json
 import os
 import re
 from typing import Any
+
+from incidents.templates import match_incident_template
 
 FIX_CODE = "code"
 FIX_HOST = "host"
@@ -293,7 +296,14 @@ def _llm_interpret(record: dict[str, Any]) -> dict[str, str] | None:
 
 
 def interpret_incident(record: dict[str, Any]) -> dict[str, str]:
-    """Return ``fix_target`` and ``user_message`` (LLM, else heuristics)."""
+    """Return ``fix_target`` and ``user_message`` (template, LLM, else heuristics)."""
+    greeting = operator_greeting()
+    templated = match_incident_template(record, greeting)
+    if templated:
+        return {
+            "fix_target": templated["fix_target"],
+            "user_message": templated["user_message"][:320],
+        }
     if os.environ.get("ORION_INCIDENT_LLM", "1").strip().lower() not in (
         "0",
         "false",
@@ -305,5 +315,5 @@ def interpret_incident(record: dict[str, Any]) -> dict[str, str]:
     target = classify_heuristic(record)
     return {
         "fix_target": target,
-        "user_message": fallback_user_message(record, target)[:320],
+        "user_message": fallback_user_message(record, target, greeting=greeting)[:320],
     }
