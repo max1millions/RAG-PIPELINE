@@ -112,6 +112,8 @@ def normalize_mac_row(row: dict[str, Any]) -> dict[str, Any]:
         source = "cron"
     elif tool == "api_gateway":
         source = "api_gateway"
+    elif tool == "prod_api_down":
+        source = "prod_api"
     else:
         source = "mcp_tool"
     host = str(row.get("host") or "mac")

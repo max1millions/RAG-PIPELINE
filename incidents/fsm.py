@@ -83,6 +83,7 @@ def should_notify(
 
     Crash/ops path (Mac jsonl): after a successful text the record is ``NOTIFIED``
     and must not be re-texted while the same Mac row (same ``ts``) is still present.
+    A **new** Mac ``ts`` for the same fingerprint reopens (another outage episode).
     ``RESOLVED`` only reopens when ``new_detected_at`` differs from the prior
     ``detected_at`` (a genuinely new failure). Callers that omit ``new_detected_at``
     (watchdog) keep the legacy "RESOLVED ⇒ reopen" behavior.
@@ -90,8 +91,11 @@ def should_notify(
     if record is None:
         return True, "new"
     state = record.get("state")
-    # Already delivered once for this open incident — do not spam.
+    prev_ts = str(record.get("detected_at") or "")
+    # Already delivered once for this open incident — do not spam the same row.
     if state == "NOTIFIED":
+        if new_detected_at and new_detected_at != prev_ts:
+            return True, "reopened"
         return False, "already_notified"
     if state == "RESOLVED":
         prev_ts = str(record.get("detected_at") or "")
@@ -165,16 +169,17 @@ def upsert_from_mac(
         incidents[fp] = record
         return record, notify, "new"
 
-    if existing.get("state") == "RESOLVED":
+    if existing.get("state") in ("RESOLVED", "NOTIFIED"):
         if notify and reason == "reopened":
             record = _new_detected_record(normalized, now=now)
             incidents[fp] = record
             return record, True, "reopened"
-        # Same Mac row still present after resolve — do not reset or re-text.
-        existing["seen_count"] = int(existing.get("seen_count") or 0) + 1
-        existing["updated_at"] = now
-        existing["mac_payload"] = normalized.get("mac_payload")
-        return existing, False, "resolved_same_event"
+        if existing.get("state") == "RESOLVED":
+            # Same Mac row still present after resolve — do not reset or re-text.
+            existing["seen_count"] = int(existing.get("seen_count") or 0) + 1
+            existing["updated_at"] = now
+            existing["mac_payload"] = normalized.get("mac_payload")
+            return existing, False, "resolved_same_event"
 
     existing["seen_count"] = int(existing.get("seen_count") or 0) + 1
     existing["updated_at"] = now

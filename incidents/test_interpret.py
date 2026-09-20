@@ -209,6 +209,16 @@ class MacNotifyOnlyTests(unittest.TestCase):
         rec = _cwr(fix_target=FIX_HOST, host="mac", tool="cron_cwr_dispatch")
         self.assertTrue(mac_notify_only(rec))
 
+    def test_prod_api_down_is_notify_only(self):
+        rec = {
+            "host": "vps",
+            "tool": "prod_api_down",
+            "module": "rightstune.com",
+            "repos_name": "rightstune.com",
+            "fix_target": FIX_HOST,
+        }
+        self.assertTrue(mac_notify_only(rec))
+
     def test_code_alias_cwr_module_still_allowed(self):
         rec = _cwr(fix_target="cwr_module", host="mac")
         self.assertFalse(mac_notify_only(rec))

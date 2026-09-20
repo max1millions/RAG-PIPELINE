@@ -1,9 +1,9 @@
 """Programmed iMessage templates for known Mac ops failures.
 
 Matched before the triage LLM so predictable errors (pull-all, disk, MySQL,
-backup, API gateway) skip model calls. Variables such as the failing repo
-name are filled from the recorded stream. Unmatched incidents still go
-through LLM interpretation or heuristics.
+backup, API gateway, production API outages) skip model calls. Variables such
+as the failing repo name or API are filled from the recorded stream. Unmatched
+incidents still go through LLM interpretation or heuristics.
 """
 
 from __future__ import annotations
@@ -16,6 +16,22 @@ FIX_HOST = "host"
 _PULL_FAIL = re.compile(
     r"FAIL\s+(.+?)\s+\((?:main|submodules|origin/main --ff-only)\)"
 )
+_PROD_API_SERVICE = re.compile(r"service=([a-z0-9._-]+)", re.I)
+_API_LABELS = {
+    "muso.ai": "the muso.ai API",
+    "spotify": "the Spotify API",
+    "soundcloud": "the SoundCloud API",
+    "ipi": "the IPI Pocket Edition API",
+    "credits.fm": "the credits.fm API",
+    "alltrack": "the AllTrack API",
+    "signwell": "the SignWell API",
+    "stripe": "the Stripe API",
+    "paypal": "the PayPal API",
+    "track1099": "the Track1099 API",
+    "trolley": "the Trolley API",
+    "twilio": "the Twilio API",
+    "recaptcha": "the Google reCAPTCHA API",
+}
 _MYSQL_HINTS = (
     "can't connect to mysql",
     "cannot connect to mysql",
@@ -119,6 +135,24 @@ def _mysql_template(record: dict[str, Any], greeting: str) -> dict[str, str] | N
     }
 
 
+def _prod_api_down_template(record: dict[str, Any], greeting: str) -> dict[str, str] | None:
+    if str(record.get("tool") or "") != "prod_api_down":
+        return None
+    blob = _stream(record)
+    match = _PROD_API_SERVICE.search(blob)
+    service_id = (match.group(1).strip().lower() if match else "")
+    label = _API_LABELS.get(service_id) or (
+        f"the {service_id} API" if service_id else "a production API"
+    )
+    return {
+        "fix_target": FIX_HOST,
+        "user_message": (
+            f"{greeting} {label} is down or unavailable on rightstune.com "
+            "production. This is an upstream outage, not a repo patch."
+        ),
+    }
+
+
 def match_incident_template(
     record: dict[str, Any],
     greeting: str,
@@ -126,6 +160,7 @@ def match_incident_template(
     """Return fix_target + user_message when a programmed template matches."""
     matchers = (
         _pull_all_template,
+        _prod_api_down_template,
         lambda rec, greet: _named_host_job(
             "cron_sync_backup",
             greet,

@@ -135,9 +135,10 @@ def mac_notify_only(record: dict[str, Any]) -> bool:
         return False
     tool = str(record.get("tool") or "")
     return (
-        record.get("host") == "mac"
+        record.get("host") in ("mac", "vps")
         or tool.startswith("cron_")
         or tool == "api_gateway"
+        or tool == "prod_api_down"
     )
 
 

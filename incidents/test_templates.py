@@ -95,6 +95,32 @@ class TemplateMatchTests(unittest.TestCase):
         self.assertIn("out of disk space", disk["user_message"])
         self.assertIn("MySQL on the production Mac could not be reached", mysql["user_message"])
 
+    def test_prod_api_down_muso(self):
+        rec = _cron(
+            "prod_api_down",
+            "rightstune.com",
+            host="vps",
+            message="prod_api_down service=muso.ai reason=unavailable",
+            raw_stderr_tail="prod_api_down service=muso.ai reason=unavailable",
+            mac_payload={
+                "stderr": "prod_api_down service=muso.ai reason=unavailable",
+                "host": "vps",
+            },
+        )
+        hit = match_incident_template(rec, "Hey Max,")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertEqual(hit["fix_target"], FIX_HOST)
+        self.assertEqual(
+            hit["user_message"],
+            "Hey Max, the muso.ai API is down or unavailable on rightstune.com "
+            "production. This is an upstream outage, not a repo patch.",
+        )
+        out = interpret_incident(rec)
+        self.assertEqual(out["fix_target"], FIX_HOST)
+        self.assertIn("muso.ai API", out["user_message"])
+        self.assertNotIn("traceback", out["user_message"].lower())
+
     def test_unknown_stays_unmatched(self):
         rec = _cron(
             "cron_email_reader",
