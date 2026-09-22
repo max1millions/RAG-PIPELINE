@@ -8,8 +8,10 @@
 #   features.auto_fix_incidents     — auto-run orion-fix on poll (keep off for generic Mac)
 #   features.cwr_auto_fix_incidents — CWR-INTERFACE code bugs: orion-fix (enable in overlay)
 #
-# Every new/reopened incident is LLM-interpreted from the recorded stdio stream
-# (tool, module, stderr/stdout) into a short iMessage. Auto-fix is a separate gate.
+# Each open fingerprint is texted once. Repeating Mac jsonl rows (new ts, same
+# fingerprint) stay silent until the incident is resolved. Auto-fix is a separate gate.
+# After resolve, a later failure of the same fingerprint is a reopen and is
+# LLM-interpreted from the recorded stdio stream into a short iMessage.
 #
 # notify_backend:
 #   log         — print messages to stdout only (safe default; no external service)
@@ -36,6 +38,8 @@ mcp_tool: rightstune_get_recent_errors
 
 mcp_timeout_s: 30
 
+# Unused for NOTIFIED Mac incidents (one text until resolve). Still used for
+# watchdog / pre-notify retries.
 dedupe_renotify_every: 10
 dedupe_renotify_hours: 24
 

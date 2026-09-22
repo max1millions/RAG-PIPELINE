@@ -40,7 +40,7 @@ class ShouldNotifyTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(reason, "new")
 
-    def test_notified_new_mac_ts_reopens(self):
+    def test_notified_new_mac_ts_does_not_reopen(self):
         rec = {
             "state": "NOTIFIED",
             "seen_count": 2,
@@ -53,8 +53,8 @@ class ShouldNotifyTests(unittest.TestCase):
             renotify_hours=24,
             new_detected_at="2026-08-06T08:00:00+00:00",
         )
-        self.assertTrue(ok)
-        self.assertEqual(reason, "reopened")
+        self.assertFalse(ok)
+        self.assertEqual(reason, "already_notified")
 
     def test_notified_never_spam(self):
         rec = {"state": "NOTIFIED", "seen_count": 99, "detected_at": "2026-08-06T07:01:17+00:00",
@@ -116,7 +116,7 @@ class UpsertFromMacTests(unittest.TestCase):
         self.assertEqual(rec2["state"], "NOTIFIED")
         self.assertEqual(rec2["seen_count"], 2)
 
-    def test_new_mac_ts_after_notify_reopens(self):
+    def test_new_mac_ts_after_notify_stays_notified(self):
         active: dict = {"incidents": {}}
         rec, _, _ = upsert_from_mac(active, _norm(), renotify_every=10, renotify_hours=24)
         mark_notified(rec)
@@ -126,10 +126,35 @@ class UpsertFromMacTests(unittest.TestCase):
             renotify_every=10,
             renotify_hours=24,
         )
-        self.assertTrue(notify2)
-        self.assertEqual(reason2, "reopened")
-        self.assertEqual(rec2["state"], "DETECTED")
-        self.assertEqual(rec2["detected_at"], "2026-08-07T07:01:17+00:00")
+        self.assertFalse(notify2)
+        self.assertEqual(reason2, "already_notified")
+        self.assertEqual(rec2["state"], "NOTIFIED")
+        self.assertEqual(rec2["detected_at"], "2026-08-06T07:01:17+00:00")
+        self.assertEqual(rec2["seen_count"], 2)
+
+    def test_hourly_cron_retries_notify_once(self):
+        """Repeating cron jsonl rows (new ts, same fingerprint) send one iMessage."""
+        active: dict = {"incidents": {}}
+        rec, notify, reason = upsert_from_mac(
+            active, _norm(), renotify_every=1, renotify_hours=0
+        )
+        self.assertTrue(notify)
+        self.assertEqual(reason, "new")
+        mark_notified(rec)
+
+        for hour in ("2026-09-22T18:10:31+00:00", "2026-09-22T19:10:30+00:00", "2026-09-22T20:10:31+00:00"):
+            rec, notify, reason = upsert_from_mac(
+                active,
+                _norm(detected_at=hour),
+                renotify_every=1,
+                renotify_hours=0,
+            )
+            self.assertFalse(notify, msg=hour)
+            self.assertEqual(reason, "already_notified")
+            self.assertEqual(rec["state"], "NOTIFIED")
+
+        self.assertEqual(rec["seen_count"], 4)
+        self.assertEqual(rec["detected_at"], "2026-08-06T07:01:17+00:00")
 
     def test_resolved_same_event_stays_resolved(self):
         active: dict = {"incidents": {}}

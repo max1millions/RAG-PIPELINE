@@ -82,20 +82,16 @@ def should_notify(
     """Decide whether to send an iMessage for this fingerprint.
 
     Crash/ops path (Mac jsonl): after a successful text the record is ``NOTIFIED``
-    and must not be re-texted while the same Mac row (same ``ts``) is still present.
-    A **new** Mac ``ts`` for the same fingerprint reopens (another outage episode).
-    ``RESOLVED`` only reopens when ``new_detected_at`` differs from the prior
-    ``detected_at`` (a genuinely new failure). Callers that omit ``new_detected_at``
-    (watchdog) keep the legacy "RESOLVED ⇒ reopen" behavior.
+    and must not be re-texted while that fingerprint stays open. Repeating cron
+    failures append a **new** Mac ``ts`` each run; that is the same outage, not a
+    new episode. Reopen only after ``RESOLVED``. Callers that omit
+    ``new_detected_at`` (watchdog) keep the legacy "RESOLVED ⇒ reopen" behavior.
     """
     if record is None:
         return True, "new"
     state = record.get("state")
-    prev_ts = str(record.get("detected_at") or "")
-    # Already delivered once for this open incident — do not spam the same row.
+    # Already delivered once for this open incident — do not spam hourly retries.
     if state == "NOTIFIED":
-        if new_detected_at and new_detected_at != prev_ts:
-            return True, "reopened"
         return False, "already_notified"
     if state == "RESOLVED":
         prev_ts = str(record.get("detected_at") or "")
