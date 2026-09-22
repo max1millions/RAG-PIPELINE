@@ -1,7 +1,8 @@
 """Programmed iMessage templates for known Mac ops failures.
 
 Matched before the triage LLM so predictable errors (pull-all, disk, MySQL,
-backup, API gateway, production API outages) skip model calls. Variables such
+backup, API gateway, production API outages, iCloud IMAP hostname) skip model
+calls. Variables such
 as the failing repo name or API are filled from the recorded stream. Unmatched
 incidents still go through LLM interpretation or heuristics.
 """
@@ -153,6 +154,29 @@ def _prod_api_down_template(record: dict[str, Any], greeting: str) -> dict[str, 
     }
 
 
+_IMAP_HINTS = (
+    "imap connect failed",
+    "nodename nor servname",
+    "name or service not known",
+)
+
+
+def _imap_template(record: dict[str, Any], greeting: str) -> dict[str, str] | None:
+    if str(record.get("tool") or "") != "cron_email_reader":
+        return None
+    blob = _stream(record).lower()
+    if not any(h in blob for h in _IMAP_HINTS):
+        return None
+    return {
+        "fix_target": FIX_HOST,
+        "user_message": (
+            f"{greeting} the cron email reader could not reach iCloud IMAP. "
+            "ICLOUD_IMAP_SERVER must be imap.mail.me.com (imap.icloud.com and "
+            "host:port values fail DNS). This is a mail-host setting, not a repo patch."
+        ),
+    }
+
+
 def match_incident_template(
     record: dict[str, Any],
     greeting: str,
@@ -161,6 +185,7 @@ def match_incident_template(
     matchers = (
         _pull_all_template,
         _prod_api_down_template,
+        _imap_template,
         lambda rec, greet: _named_host_job(
             "cron_sync_backup",
             greet,
