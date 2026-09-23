@@ -146,6 +146,26 @@ All three reuse the existing incremental manifest (`rag/index_manifest.json`), s
 
 Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `bluebubbles` (OpenClaw iMessage).
 
+### BlueBubbles texts in Orion memory
+
+`openclaw message send` delivers those iMessages without writing Orion's session, so a later question about a notification has nothing to recall. `bin/orion-bb-memory sync` reads BlueBubbles for outbound texts in Max's 1:1 chat (default `+16083336132`, plus `notify_targets` in the overlay) and appends each one to `memory/YYYY-MM-DD.md` under **iMessage to Max (BlueBubbles)**. It then runs `openclaw memory index --agent main`. A short recall hint is added to `MEMORY.md` once.
+
+The Orion node runs this every minute from a user timer. Install on that host (as the `openclaw` user):
+
+```bash
+./scripts/install-bb-memory-timer.sh
+```
+
+The installer also sets `agents.defaults.memorySearch.provider` to `gemini`. This host's agent auth is Google; the OpenAI default cannot embed memory. State and the dedupe list live in `~/.openclaw/bb-max-memory/` (not inside the memory corpus). Logs: `~/.openclaw/logs/bb-max-memory.log`.
+
+```bash
+./bin/orion-bb-memory sync --dry-run
+./bin/orion-bb-memory sync --backfill
+./bin/orion-bb-memory status
+```
+
+`BB_MEMORY_HANDLES` (comma-separated E.164) overrides the target list. `BB_MEMORY_TIMEZONE` defaults to `America/Chicago`. Group chats are not ingested.
+
 ## Troubleshooting
 
 
@@ -158,6 +178,7 @@ Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `b
 | Watchdog false positives    | Refresh local DB: `./db/import_dump.sh ...`                |
 | `ANTHROPIC_API_KEY missing` | Set key in `$ORION_OVERLAY_ROOT/config/.env`               |
 | Reindex hook missing/stale  | Re-run `./scripts/install-rag-reindex-hook.sh`             |
+| Orion forgets an iMessage   | `./bin/orion-bb-memory sync --backfill` on the Orion node  |
 
 
 ## License

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Ingest BlueBubbles texts sent to Max into OpenClaw daily memory.
+# Stdlib only — system python3, not the RAG venv.
+set -euo pipefail
+STACK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec python3 "$STACK_ROOT/notifications/bb_memory.py" "$@"

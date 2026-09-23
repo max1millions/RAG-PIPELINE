@@ -57,6 +57,7 @@ Overlay discovery: `ORION_OVERLAY_ROOT` → `features.yaml` `paths.overlay_root`
 | `bin/orion-code` | `codeflow/` | `features.langgraph_multiagent` | Code worker entry |
 | `bin/orion-db` | `db/` | `features.local_mysql` | Local MySQL queries |
 | `bin/orion-incident` | `incidents/` | `features.incidents` | MCP poll, remediate, notify |
+| `bin/orion-bb-memory` | `notifications/` | (host timer) | Copy BlueBubbles texts to Max into OpenClaw daily memory |
 | `bin/orion-watchdog` | `watchdog/` | `features.watchdog` | SQL validation checks |
 | `bin/orion-golden-test` | `golden/` | (manifest) | Fixture regression tests |
 | `bin/orion-web-test` | `web/` | `features.local_web` | Playwright smoke pages |
