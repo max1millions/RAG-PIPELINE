@@ -121,6 +121,26 @@ class TemplateMatchTests(unittest.TestCase):
         self.assertIn("muso.ai API", out["user_message"])
         self.assertNotIn("traceback", out["user_message"].lower())
 
+    def test_email_reader_imap_hostname(self):
+        rec = _cron(
+            "cron_email_reader",
+            "OTHER-SCRIPTS",
+            message="IMAP connect failed: [Errno 8] nodename nor servname provided, or not known",
+            raw_stderr_tail="",
+            mac_payload={
+                "stdout": "IMAP connect failed: [Errno 8] nodename nor servname provided, or not known",
+                "stderr": "",
+            },
+        )
+        hit = match_incident_template(rec, "Hey Max,")
+        assert hit is not None
+        self.assertEqual(hit["fix_target"], FIX_HOST)
+        self.assertIn("imap.mail.me.com", hit["user_message"])
+        self.assertIn("iCloud IMAP", hit["user_message"])
+        out = interpret_incident(rec)
+        self.assertEqual(out["fix_target"], FIX_HOST)
+        self.assertIn("imap.mail.me.com", out["user_message"])
+
     def test_unknown_stays_unmatched(self):
         rec = _cron(
             "cron_email_reader",

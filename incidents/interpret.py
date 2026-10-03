@@ -1,8 +1,8 @@
 """LLM interpretation of production incident streams for iMessage.
 
 Every Mac incident (cron, MCP, API gateway) is classified from the recorded
-stdio stream. Known ops failures (pull-all, disk, MySQL, backup, API gateway)
-use a programmed iMessage template and skip the LLM. Everything else:
+stdio stream. Known ops failures (pull-all, disk, MySQL, backup, API gateway,
+iCloud IMAP hostname) use a programmed iMessage template and skip the LLM. Everything else:
 
 - ``code`` — application/repo bug (traceback, validator, logic error).
 - ``host`` — environment (network, auth, disk, database, missing credentials, OS).

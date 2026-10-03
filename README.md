@@ -144,7 +144,7 @@ The Chroma index is kept fresh without manual `orion-rag-index` runs in three si
 
 All three reuse the existing incremental manifest (`rag/index_manifest.json`), so only changed files are re-embedded. Deploy and hook paths scope to `repos`/`docs` only (`sql` included for `SQL-SCRIPTS`). A full `orion-rag-index --reset --no-incremental` is still the right tool after large restructures or manifest corruption.
 
-Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `bluebubbles` (OpenClaw iMessage).
+Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `bluebubbles` (OpenClaw iMessage). Each open fingerprint is texted **once** until it is resolved (a newer Mac jsonl `ts`, an in-progress auto-fix, or the 5-minute poll does not send another text).
 
 ### BlueBubbles texts in Orion memory
 
