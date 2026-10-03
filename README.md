@@ -148,7 +148,7 @@ Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `b
 
 ### BlueBubbles texts in Orion memory
 
-`openclaw message send` delivers those iMessages without writing Orion's session, so a later question about a notification has nothing to recall. `bin/orion-bb-memory sync` reads BlueBubbles for outbound texts in Max's 1:1 chat (default `+16083336132`, plus `notify_targets` in the overlay) and appends each one to `memory/YYYY-MM-DD.md` under **iMessage to Max (BlueBubbles)**. It then runs `openclaw memory index --agent main`. A short recall hint is added to `MEMORY.md` once.
+`openclaw message send` delivers those iMessages without writing Orion's session, so a later question about a notification has nothing to recall. `bin/orion-bb-memory sync` reads BlueBubbles for outbound texts in Max's 1:1 chat (published default `+15551234567`; the Orion host uses overlay `notify_targets` or `BB_MEMORY_HANDLES`) and appends each one to `memory/YYYY-MM-DD.md` under **iMessage to Max (BlueBubbles)**. It then runs `openclaw memory index --agent main`. A short recall hint is added to `MEMORY.md` once.
 
 The Orion node runs this every minute from a user timer. Install on that host (as the `openclaw` user):
 

@@ -38,8 +38,8 @@ def _message(**overrides):
         "associatedMessageGuid": None,
         "chats": [
             {
-                "guid": "any;-;+16083336132",
-                "chatIdentifier": "+16083336132",
+                "guid": "any;-;+15551234567",
+                "chatIdentifier": "+15551234567",
             }
         ],
     }
@@ -50,7 +50,7 @@ def _message(**overrides):
 class ChatFilterTests(unittest.TestCase):
     def test_max_dm_is_direct(self):
         self.assertTrue(
-            is_direct_to_handle("any;-;+16083336132", "+16083336132", "+16083336132")
+            is_direct_to_handle("any;-;+15551234567", "+15551234567", "+15551234567")
         )
 
     def test_group_is_not_direct(self):
@@ -58,31 +58,31 @@ class ChatFilterTests(unittest.TestCase):
             is_direct_to_handle(
                 "any;+;b10a6aaddb2f4462811f32abf65e8ca4",
                 "b10a6aaddb2f4462811f32abf65e8ca4",
-                "+16083336132",
+                "+15551234567",
             )
         )
 
     def test_other_dm_is_not_max(self):
         self.assertFalse(
-            is_direct_to_handle("any;-;+14109803992", "+14109803992", "+16083336132")
+            is_direct_to_handle("any;-;+15557654321", "+15557654321", "+15551234567")
         )
 
     def test_remember_notification(self):
-        self.assertTrue(should_remember(_message(), ["+16083336132"]))
+        self.assertTrue(should_remember(_message(), ["+15551234567"]))
 
     def test_skip_reaction(self):
         self.assertFalse(
             should_remember(
                 _message(associatedMessageGuid="p:0/ABC", text="Liked a message"),
-                ["+16083336132"],
+                ["+15551234567"],
             )
         )
 
     def test_skip_inbound(self):
-        self.assertFalse(should_remember(_message(isFromMe=False), ["+16083336132"]))
+        self.assertFalse(should_remember(_message(isFromMe=False), ["+15551234567"]))
 
     def test_skip_empty(self):
-        self.assertFalse(should_remember(_message(text="  "), ["+16083336132"]))
+        self.assertFalse(should_remember(_message(text="  "), ["+15551234567"]))
 
     def test_skip_group_even_if_from_me(self):
         message = _message(
@@ -93,7 +93,7 @@ class ChatFilterTests(unittest.TestCase):
                 }
             ]
         )
-        self.assertFalse(should_remember(message, ["+16083336132"]))
+        self.assertFalse(should_remember(message, ["+15551234567"]))
 
 
 class FormatTests(unittest.TestCase):
@@ -131,13 +131,13 @@ class FormatTests(unittest.TestCase):
         other = _message(
             guid="COLE",
             text="hello cole",
-            chats=[{"guid": "any;-;+14109803992", "chatIdentifier": "+14109803992"}],
+            chats=[{"guid": "any;-;+15557654321", "chatIdentifier": "+15557654321"}],
         )
         seen: set[str] = set()
         with tempfile.TemporaryDirectory() as tmp:
             written, pending = remember_messages(
                 [newer, other, older],
-                handles=["+16083336132"],
+                handles=["+15551234567"],
                 memory_root=Path(tmp),
                 tz=TZ,
                 seen=seen,
@@ -158,19 +158,19 @@ class HintAndTargetsTests(unittest.TestCase):
     def test_incidents_targets_inline_and_list(self):
         text = """
 notify_backend: bluebubbles
-notify_targets: ['+16083336132']
+notify_targets: ['+15551234567']
 message_greeting: Hey Max,
 """
-        self.assertEqual(handles_from_incidents_text(text), ["+16083336132"])
+        self.assertEqual(handles_from_incidents_text(text), ["+15551234567"])
         listed = """
 notify_targets:
-  - '+16083336132'
-  - '+19995550100'
+  - '+15551234567'
+  - '+15550001111'
 notify_channel: bluebubbles
 """
         self.assertEqual(
             handles_from_incidents_text(listed),
-            ["+16083336132", "+19995550100"],
+            ["+15551234567", "+15550001111"],
         )
 
     def test_hint_written_once(self):

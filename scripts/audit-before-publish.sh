@@ -36,7 +36,7 @@ _filter_allowlist() {
     -e '/home/YOUR_USER(/|$|[^a-zA-Z])' \
     -e '/home/you(/|$|[^a-zA-Z])' \
     -e 'max@rightstune\.com' \
-    -e '\+15551234567' \
+    -e '\+1555[0-9]{7}' \
     -e '\+1XXXXXXXXXX' \
     -e 'sk-ant-api0[0-9]-REPLACE' \
     -e 'whsec_test[A-Za-z0-9]+' \

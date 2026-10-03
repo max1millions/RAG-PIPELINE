@@ -42,7 +42,9 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-DEFAULT_HANDLE = "+16083336132"
+# Fictional NANP number. Production overrides this with overlay notify_targets
+# or BB_MEMORY_HANDLES so a real handset number is not stored in the public repo.
+DEFAULT_HANDLE = "+15551234567"
 DEFAULT_TIMEZONE = "America/Chicago"
 SECTION_HEADING = "## iMessage to Max (BlueBubbles)"
 HINT_HEADING = "## iMessage memory"
@@ -192,7 +194,7 @@ def is_group_guid(guid: str) -> bool:
 def is_direct_to_handle(guid: str, identifier: str, handle: str) -> bool:
     """True for a 1:1 BlueBubbles chat with ``handle``.
 
-    BlueBubbles guids look like ``any;-;+16083336132`` for a DM and
+    BlueBubbles guids look like ``any;-;+15551234567`` for a DM and
     ``any;+;<group-id>`` for a group. Group chats are not notification DMs.
     """
     handle = handle.strip()
