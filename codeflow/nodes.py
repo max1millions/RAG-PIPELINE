@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from codeflow.cursor_backend import build_brief, run_cursor_agent_local
 from codeflow.file_context import gather_file_context
 from codeflow.mac_bridge import resolve_target, run_cursor_agent_mac
-from codeflow.mac_ops import remote_git_commit, remote_syntax_check
+from codeflow.mac_ops import remote_git_commit, remote_prepare_branch, remote_syntax_check
 from codeflow.plan_io import read_plan, write_plan
 from codeflow.patch_apply import apply_edits
 from codeflow.test_runner import format_test_results, run_tests
@@ -63,6 +63,10 @@ class AgentState(TypedDict, total=False):
     code_backend: str
     fix_target: str
     cursor_summary: str
+    push_branch: str
+    main_only: bool
+    session_id: str
+    branch_note: str
 
 
 def _read_prompt(name: str) -> str:
@@ -134,6 +138,88 @@ def triage_node(state: AgentState) -> AgentState:
         "code_backend": backend,
         "complexity": parsed.get("complexity", "complex"),
         "iteration": state.get("iteration", 0),
+    }
+
+
+def prepare_branch_node(state: AgentState) -> AgentState:
+    """Check out this chat's branch before any edits."""
+    from codeflow.chat_branch import prepare_repo_branch, resolve_branch
+
+    session_id = str(state.get("session_id") or "")
+    if state.get("fix_target") == "mac":
+        resolved = resolve_branch(
+            request=state.get("request") or "",
+            repo=state.get("repo") or "",
+            repo_path=Path(state.get("repo_path") or "."),
+            incident_fingerprint=str(state.get("incident_fingerprint") or ""),
+            session_id=session_id,
+        )
+        if not resolved.get("ok"):
+            return {
+                **state,
+                "error": str(resolved.get("error") or "could not choose a branch"),
+                "summary": str(resolved.get("error") or ""),
+                "approved": False,
+            }
+        try:
+            from codeflow.mac_bridge import load_mac_bridge_config, mac_workdir
+
+            workdir = str(mac_workdir(state.get("repo") or "", load_mac_bridge_config()))
+        except Exception as exc:
+            return {
+                **state,
+                "error": f"mac workdir unavailable: {exc}",
+                "summary": f"mac workdir unavailable: {exc}",
+                "approved": False,
+            }
+        remote = remote_prepare_branch(
+            workdir=workdir,
+            branch=str(resolved["branch"]),
+            main_only=bool(resolved.get("main_only")),
+        )
+        if not remote.get("ok"):
+            return {
+                **state,
+                "error": str(remote.get("error") or "mac branch checkout failed"),
+                "summary": str(remote.get("error") or ""),
+                "approved": False,
+            }
+        branch = str(remote.get("branch") or resolved["branch"])
+        if resolved.get("session_id") and not remote.get("main_only"):
+            from codeflow.chat_branch import remember_repo
+
+            remember_repo(str(resolved["session_id"]), state.get("repo") or "", branch)
+        return {
+            **state,
+            "repo_path": workdir,
+            "push_branch": branch,
+            "main_only": bool(remote.get("main_only")),
+            "session_id": str(resolved.get("session_id") or ""),
+            "branch_note": str(remote.get("note") or ""),
+            "error": "",
+        }
+
+    prepared = prepare_repo_branch(
+        Path(state["repo_path"]),
+        request=state.get("request") or "",
+        repo=state.get("repo") or "",
+        incident_fingerprint=str(state.get("incident_fingerprint") or ""),
+        session_id=session_id,
+    )
+    if not prepared.get("ok"):
+        return {
+            **state,
+            "error": str(prepared.get("error") or "could not check out chat branch"),
+            "summary": str(prepared.get("error") or ""),
+            "approved": False,
+        }
+    return {
+        **state,
+        "push_branch": str(prepared.get("branch") or ""),
+        "main_only": bool(prepared.get("main_only")),
+        "session_id": str(prepared.get("session_id") or session_id),
+        "branch_note": str(prepared.get("note") or ""),
+        "error": "",
     }
 
 
@@ -291,7 +377,7 @@ def planner_node(state: AgentState) -> AgentState:
                 "Run repo syntax/tests as configured for this fix run.\n\n"
                 "## Risks and rollback notes\n"
                 "Assumptions above may be wrong; PR review is the HITL gate. "
-                "Revert the orion-branch commit if behavior is incorrect.\n"
+                "Revert the chat-branch commit if behavior is incorrect.\n"
             )
             clarification = None
 
@@ -640,7 +726,7 @@ def review_node(state: AgentState) -> AgentState:
     }
 
 
-def _create_pr(repo_path: Path, repo: str, state: AgentState, timeout: int) -> str:
+def _create_pr(repo_path: Path, repo: str, state: AgentState, timeout: int, head: str) -> str:
     if not feature_enabled("auto_pr"):
         return ""
 
@@ -665,7 +751,7 @@ def _create_pr(repo_path: Path, repo: str, state: AgentState, timeout: int) -> s
     body = "\n".join(body_parts)
 
     view = subprocess.run(
-        ["gh", "pr", "view", "orion", "--json", "url"],
+        ["gh", "pr", "view", head, "--json", "url"],
         cwd=repo_path,
         capture_output=True,
         text=True,
@@ -688,7 +774,7 @@ def _create_pr(repo_path: Path, repo: str, state: AgentState, timeout: int) -> s
             "--base",
             "main",
             "--head",
-            "orion",
+            head,
             "--title",
             title,
             "--body",
@@ -704,7 +790,7 @@ def _create_pr(repo_path: Path, repo: str, state: AgentState, timeout: int) -> s
     err = (create.stderr or create.stdout or "").strip()
     if "already exists" in err.lower():
         view2 = subprocess.run(
-            ["gh", "pr", "view", "orion", "--json", "url"],
+            ["gh", "pr", "view", head, "--json", "url"],
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -727,6 +813,8 @@ def git_commit_node(state: AgentState) -> AgentState:
             force_push=bool(state.get("force_push")),
             request=state.get("request") or "",
             repo=state.get("repo") or "",
+            branch=str(state.get("push_branch") or ""),
+            main_only=bool(state.get("main_only")),
         )
         return {
             **state,
@@ -758,17 +846,39 @@ def git_commit_node(state: AgentState) -> AgentState:
             env=env,
         )
 
-    push_branch_proc = run(["config", "--get", "hooks.allowed-push-branch"])
-    push_branch = (
-        push_branch_proc.stdout.strip()
-        if push_branch_proc.returncode == 0 and push_branch_proc.stdout.strip()
-        else "orion"
-    )
-    main_only = push_branch == "main"
+    push_branch = str(state.get("push_branch") or "").strip()
+    main_only = bool(state.get("main_only"))
+    if not push_branch:
+        from codeflow.chat_branch import prepare_repo_branch
 
-    checkout = run(["checkout", push_branch])
-    if checkout.returncode != 0:
-        run(["checkout", "-b", push_branch])
+        prepared = prepare_repo_branch(
+            repo_path,
+            request=state.get("request") or "",
+            repo=state.get("repo") or "",
+            incident_fingerprint=str(state.get("incident_fingerprint") or ""),
+            session_id=str(state.get("session_id") or ""),
+        )
+        if not prepared.get("ok"):
+            err = str(prepared.get("error") or "could not check out chat branch")
+            return {**state, "error": err, "summary": err, "approved": False, "pushed": False}
+        push_branch = str(prepared["branch"])
+        main_only = bool(prepared.get("main_only"))
+
+    current = run(["rev-parse", "--abbrev-ref", "HEAD"])
+    if (current.stdout or "").strip() != push_branch:
+        checkout = run(["checkout", push_branch])
+        if checkout.returncode != 0:
+            created = run(["checkout", "-b", push_branch])
+            if created.returncode != 0:
+                err = (created.stderr or checkout.stderr or "checkout failed").strip()
+                return {
+                    **state,
+                    "error": err[:400],
+                    "summary": err[:400],
+                    "approved": False,
+                    "pushed": False,
+                    "push_branch": push_branch,
+                }
 
     run(["add", "-A"])
     msg = (state.get("coder_output") or {}).get("commit_message") or state["request"][:72]
@@ -788,6 +898,7 @@ def git_commit_node(state: AgentState) -> AgentState:
     should_push = state.get("force_push") or feature_enabled("auto_push_orion")
     pushed = False
     pr_url = ""
+    push_error = ""
     if should_push:
         gate = check_diff(repo_path, env=env)
         if not gate.get("passed"):
@@ -803,9 +914,11 @@ def git_commit_node(state: AgentState) -> AgentState:
             }
         push = run(["push", "-u", "origin", push_branch])
         pushed = push.returncode == 0
+        if not pushed:
+            push_error = (push.stderr or push.stdout or "push failed").strip()[:300]
         if pushed and not main_only:
             try:
-                pr_url = _create_pr(repo_path, state["repo"], state, timeout)
+                pr_url = _create_pr(repo_path, state["repo"], state, timeout, push_branch)
             except FileNotFoundError:
                 pr_url = "(gh not installed)"
             except subprocess.TimeoutExpired:
@@ -820,14 +933,21 @@ def git_commit_node(state: AgentState) -> AgentState:
                 summary += f" — PR: {pr_url}"
             elif pr_url:
                 summary += f" — {pr_url}"
+    elif should_push:
+        summary += f" — push failed: {push_error}"
     else:
         summary += " — push deferred (set auto_push_orion or use --push)"
+    note = str(state.get("branch_note") or "").strip()
+    if note:
+        summary += f" ({note})"
 
     return {
         **state,
         "commit_sha": sha,
         "pushed": pushed,
         "pr_url": pr_url,
+        "push_branch": push_branch,
+        "main_only": main_only,
         "summary": summary,
     }
 

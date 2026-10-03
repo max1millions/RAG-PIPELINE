@@ -24,7 +24,7 @@ RightsTune runs a large set of Python, PHP, and SQL pipelines that handle music 
 
 Orion uses this **RAG pipeline** to pull small, relevant chunks from a local Chroma index instead of loading whole repos into model context. Indexing and search are local (embeddings only, no LLM on the retrieval path). This is so Orion can understand the codebase well enough to provide context to Claude when making code changes autonomously.
 
-**In short:** this module gives Orion a searchable memory of the entire RightsTune source code, READMEs, SQL scripts, docs, etc. so it can answer questions and ship fixes grounded in how the system actually works. Orion pushes code changes to a separate branch in each repo so I can review and merge via human-in-the-loop protocols (HITL).
+**In short:** this module gives Orion a searchable memory of the entire RightsTune source code, READMEs, SQL scripts, docs, etc. so it can answer questions and ship fixes grounded in how the system actually works. Each iMessage chat gets its own `cursor/…` branch. Follow-up changes in that chat stay on the branch; `/new` starts another. Orion opens a PR and merges it into `main` only when asked.
 
 Orion uses RAG in two ways: `**orion-rag-query**` for exploration and answers, and `**orion-fix**` which injects RAG context into the LangGraph code-change workflow.
 
@@ -193,7 +193,7 @@ This repository is public for portfolio and review purposes. All rights reserved
 
 - `../skills/RAG-SEARCH_SKILL.md` — dev-mode RAG workflow before `orion-fix`
 - `../skills/ORION-DEV_SKILL.md` — code modification protocol
-- `../skills/GIT-SYNC_SKILL.md` — `orion` branch push rules
+- `../skills/GIT-SYNC_SKILL.md` — per-chat `cursor/*` branch push rules
 - `../skills/OPENCLAW-PROXY_SKILL.md` — proxy runtime when running REPOS Python locally
 - `../DOCUMENTATION/Phase4-Watchdog-Golden.md` — watchdog + golden tests
 

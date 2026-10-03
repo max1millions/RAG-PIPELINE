@@ -147,7 +147,7 @@ def main() -> int:
 
     p_remed = sub.add_parser("remediate", help="Run orion-fix for an incident fingerprint prefix")
     p_remed.add_argument("prefix")
-    p_remed.add_argument("--push", action="store_true", help="Push to origin/orion after tests pass")
+    p_remed.add_argument("--push", action="store_true", help="Push the incident chat branch after tests pass")
     p_remed.add_argument("--dry-run", action="store_true")
     p_remed.add_argument("--json", action="store_true")
     p_remed.set_defaults(func=cmd_remediate)

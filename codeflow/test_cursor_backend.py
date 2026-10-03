@@ -17,6 +17,7 @@ class BriefTests(unittest.TestCase):
     def test_brief_includes_constraints(self) -> None:
         brief = build_brief(request="fix x", repo="SCHEMA", repo_path="/tmp/r")
         self.assertIn("do NOT commit", brief)
+        self.assertIn("already on this chat's git branch", brief)
         self.assertIn(".env", brief)
 
 
@@ -69,10 +70,12 @@ class CursorGraphTests(unittest.TestCase):
                     "code_backend": "cursor",
                     "fix_target": "node",
                     "force_push": False,
+                    "session_id": "11111111-2222-3333-4444-55555555abcd",
                 }
             )
         self.assertTrue(final.get("approved"))
         self.assertTrue(final.get("commit_sha"))
+        self.assertTrue(str(final.get("push_branch") or "").startswith("cursor/"))
 
 
 if __name__ == "__main__":
