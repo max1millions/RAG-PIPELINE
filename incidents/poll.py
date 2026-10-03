@@ -211,7 +211,8 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
             mark_notifying(record)
         ok, detail = send_notifications(record, dry_run=dry_run)
         if ok:
-            # NOTIFIED (not RESOLVED): same Mac jsonl row must not re-open every poll.
+            # One text per open fingerprint. A newer Mac ts or a FIXING state
+            # must not send another iMessage on the next 5-minute poll.
             if not dry_run:
                 mark_notified(record)
             result["notified"].append(

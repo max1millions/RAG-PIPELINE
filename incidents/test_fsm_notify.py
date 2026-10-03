@@ -40,7 +40,7 @@ class ShouldNotifyTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(reason, "new")
 
-    def test_notified_new_mac_ts_reopens(self):
+    def test_notified_new_mac_ts_does_not_reopen(self):
         rec = {
             "state": "NOTIFIED",
             "seen_count": 2,
@@ -49,12 +49,28 @@ class ShouldNotifyTests(unittest.TestCase):
         }
         ok, reason = should_notify(
             rec,
-            renotify_every=10,
-            renotify_hours=24,
+            renotify_every=1,
+            renotify_hours=0,
             new_detected_at="2026-08-06T08:00:00+00:00",
         )
-        self.assertTrue(ok)
-        self.assertEqual(reason, "reopened")
+        self.assertFalse(ok)
+        self.assertEqual(reason, "already_notified")
+
+    def test_fixing_does_not_renotify(self):
+        rec = {
+            "state": "FIXING",
+            "seen_count": 4,
+            "detected_at": "2026-08-06T07:01:17+00:00",
+            "last_notified_at": "2026-08-06T07:05:00+00:00",
+        }
+        ok, reason = should_notify(
+            rec,
+            renotify_every=1,
+            renotify_hours=0,
+            new_detected_at="2026-08-06T08:00:00+00:00",
+        )
+        self.assertFalse(ok)
+        self.assertEqual(reason, "already_notified")
 
     def test_notified_never_spam(self):
         rec = {"state": "NOTIFIED", "seen_count": 99, "detected_at": "2026-08-06T07:01:17+00:00",
@@ -116,20 +132,19 @@ class UpsertFromMacTests(unittest.TestCase):
         self.assertEqual(rec2["state"], "NOTIFIED")
         self.assertEqual(rec2["seen_count"], 2)
 
-    def test_new_mac_ts_after_notify_reopens(self):
+    def test_new_mac_ts_after_notify_stays_quiet(self):
         active: dict = {"incidents": {}}
         rec, _, _ = upsert_from_mac(active, _norm(), renotify_every=10, renotify_hours=24)
         mark_notified(rec)
         rec2, notify2, reason2 = upsert_from_mac(
             active,
             _norm(detected_at="2026-08-07T07:01:17+00:00"),
-            renotify_every=10,
-            renotify_hours=24,
+            renotify_every=1,
+            renotify_hours=0,
         )
-        self.assertTrue(notify2)
-        self.assertEqual(reason2, "reopened")
-        self.assertEqual(rec2["state"], "DETECTED")
-        self.assertEqual(rec2["detected_at"], "2026-08-07T07:01:17+00:00")
+        self.assertFalse(notify2)
+        self.assertEqual(reason2, "already_notified")
+        self.assertEqual(rec2["state"], "NOTIFIED")
 
     def test_resolved_same_event_stays_resolved(self):
         active: dict = {"incidents": {}}

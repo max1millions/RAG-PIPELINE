@@ -36,6 +36,8 @@ mcp_tool: rightstune_get_recent_errors
 
 mcp_timeout_s: 30
 
+# Kept for older overlays. Open incidents are texted once and these
+# values do not schedule another iMessage.
 dedupe_renotify_every: 10
 dedupe_renotify_hours: 24
 

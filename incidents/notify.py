@@ -215,6 +215,9 @@ def send_fix_notification(
     pr_url: str = "",
     dry_run: bool = False,
 ) -> tuple[bool, str]:
+    """Send the fix result once. Later polls must not text it again."""
+    if record.get("fix_notified_at"):
+        return True, "fix result already sent"
     cfg = load_incidents_config()
     targets: list[str] = list(cfg.get("notify_targets") or [])
     backend = str(cfg.get("notify_backend") or "log").strip().lower()
@@ -225,6 +228,10 @@ def send_fix_notification(
 
     if backend == "log" or not targets:
         print(f"[notify] {text}", file=sys.stdout)
+        record["fix_notified_at"] = record.get("updated_at") or "sent"
         return True, text
 
-    return _send_bluebubbles(targets, text, cfg)
+    ok, detail_out = _send_bluebubbles(targets, text, cfg)
+    if ok:
+        record["fix_notified_at"] = record.get("updated_at") or "sent"
+    return ok, detail_out

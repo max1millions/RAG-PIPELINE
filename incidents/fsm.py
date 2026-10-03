@@ -81,43 +81,37 @@ def should_notify(
 ) -> tuple[bool, str]:
     """Decide whether to send an iMessage for this fingerprint.
 
-    Crash/ops path (Mac jsonl): after a successful text the record is ``NOTIFIED``
-    and must not be re-texted while the same Mac row (same ``ts``) is still present.
-    A **new** Mac ``ts`` for the same fingerprint reopens (another outage episode).
-    ``RESOLVED`` only reopens when ``new_detected_at`` differs from the prior
-    ``detected_at`` (a genuinely new failure). Callers that omit ``new_detected_at``
-    (watchdog) keep the legacy "RESOLVED ⇒ reopen" behavior.
+    One text per open issue. After a successful send (``last_notified_at`` is
+    set), later polls do not text again — including a newer Mac ``ts``, an
+    auto-fix state (``FIXING`` / ``FIXED`` / ``FIX_FAILED``), or the 5-minute
+    poll seeing the same failure still in ``incidents.jsonl``.
+
+    ``renotify_every`` and ``renotify_hours`` are accepted for callers and
+    ignored. Repeating an open incident is not a second notification.
+
+    ``RESOLVED`` / ``ANOMALY_RESOLVED`` can notify once more when the failure
+    actually comes back (a different ``ts``, or a watchdog call with no
+    ``new_detected_at``). The same resolved row does not.
+    A failed send (no ``last_notified_at``) may retry until one delivery.
     """
+    del renotify_every, renotify_hours  # open incidents are not repeated on a timer
     if record is None:
         return True, "new"
     state = record.get("state")
     prev_ts = str(record.get("detected_at") or "")
-    # Already delivered once for this open incident — do not spam the same row.
-    if state == "NOTIFIED":
-        if new_detected_at and new_detected_at != prev_ts:
-            return True, "reopened"
-        return False, "already_notified"
-    if state == "RESOLVED":
-        prev_ts = str(record.get("detected_at") or "")
+    if state in ("RESOLVED", "ANOMALY_RESOLVED"):
         if new_detected_at is None:
-            # Watchdog / legacy callers: treat reappearance after resolve as reopen.
             return True, "reopened"
         if new_detected_at and new_detected_at != prev_ts:
             return True, "reopened"
         return False, "resolved_same_event"
-    if state == "ESCALATED" and not record.get("last_notified_at"):
+    if record.get("last_notified_at"):
+        return False, "already_notified"
+    if state in ("ESCALATED", "ANOMALY_ESCALATED"):
         return True, "escalated_retry"
-    seen = int(record.get("seen_count") or 1)
-    if seen > 1 and seen % renotify_every == 0:
-        return True, "renotify_count"
-    detected = _parse_ts(str(record.get("detected_at") or ""))
-    last_notified = _parse_ts(str(record.get("last_notified_at") or ""))
-    ref = last_notified or detected
-    if ref and renotify_hours > 0:
-        age_h = (datetime.now(timezone.utc) - ref).total_seconds() / 3600.0
-        if age_h >= renotify_hours:
-            return True, "renotify_age"
-    return False, "duplicate"
+    if state in ("DETECTED", "ANOMALY_OPEN"):
+        return True, "new"
+    return False, "already_notified"
 
 
 def _new_detected_record(normalized: dict[str, Any], *, now: str) -> dict[str, Any]:
