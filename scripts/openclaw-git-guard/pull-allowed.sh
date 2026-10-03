@@ -15,7 +15,7 @@ _pull_git() {
 pull_allowed() {
   branch="$1"
   case "$branch" in
-    main) return 0 ;;
+    main|master) return 0 ;;
     cursor/*)
       echo "$branch" | grep -Eq '^cursor/[A-Za-z0-9._/-]+$' || return 1
       return 0
@@ -31,5 +31,5 @@ pull_allowed() {
 }
 
 pull_allowed_message() {
-  printf '%s' "origin/main, origin/cursor/*"
+  printf '%s' "origin/main, origin/master, origin/cursor/*"
 }
