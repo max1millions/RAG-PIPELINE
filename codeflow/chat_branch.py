@@ -478,8 +478,9 @@ def merge_branch(
             "pr_url": pr_url,
         }
 
+    # Merge on GitHub. Never merge the chat branch into local main.
     merged = subprocess.run(
-        ["gh", "pr", "merge", branch, "--merge", "--delete-branch"],
+        ["gh", "pr", "merge", pr_url, "--merge", "--delete-branch"],
         cwd=repo_path,
         capture_output=True,
         text=True,
@@ -494,19 +495,64 @@ def merge_branch(
             "branch": branch,
             "pushed": True,
             "pr_url": pr_url,
+            "merged": False,
         }
 
+    view = subprocess.run(
+        ["gh", "pr", "view", pr_url, "--json", "state,baseRefName,mergeCommit,url"],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    merge_sha = ""
+    if view.returncode == 0 and view.stdout.strip():
+        try:
+            data = json.loads(view.stdout)
+        except json.JSONDecodeError:
+            data = {}
+        state = str(data.get("state") or "")
+        base = str(data.get("baseRefName") or "")
+        merge_sha = str((data.get("mergeCommit") or {}).get("oid") or "")
+        if state != "MERGED" or base != "main":
+            return {
+                "ok": False,
+                "error": f"GitHub PR is {state or 'unknown'} into {base or 'unknown'}, not merged into main",
+                "repo": repo,
+                "branch": branch,
+                "pushed": True,
+                "pr_url": pr_url,
+                "merged": False,
+            }
+    else:
+        err = (view.stderr or view.stdout or "could not confirm GitHub merge").strip()
+        return {
+            "ok": False,
+            "error": err[:500],
+            "repo": repo,
+            "branch": branch,
+            "pushed": True,
+            "pr_url": pr_url,
+            "merged": False,
+        }
+
+    # Local main only fast-forwards to the commit GitHub already created.
     git_run(repo_path, ["checkout", "main"])
-    git_run(repo_path, ["pull", "origin", "main"], timeout=timeout)
+    git_run(repo_path, ["fetch", "origin", "main"], timeout=timeout)
+    git_run(repo_path, ["merge", "--ff-only", "origin/main"], timeout=timeout)
     git_run(repo_path, ["branch", "-D", branch])
     if session_id:
         forget_repo(session_id, repo)
+    short = merge_sha[:8] if merge_sha else "merged"
     return {
         "ok": True,
         "repo": repo,
         "branch": branch,
         "pushed": True,
         "merged": True,
+        "merge_sha": merge_sha,
         "pr_url": pr_url,
-        "summary": f"Merged {branch} into main for {repo}. PR: {pr_url}",
+        "summary": (
+            f"Merged {branch} into main on GitHub ({short}) for {repo}. PR: {pr_url}"
+        ),
     }

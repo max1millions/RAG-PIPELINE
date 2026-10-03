@@ -125,6 +125,69 @@ class MergeTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("refusing", result["error"])
 
+    def test_merge_uses_github_pr_merge(self) -> None:
+        """Chat branches land on main via GitHub, not a local git merge."""
+        from codeflow import chat_branch
+
+        git_calls: list[list[str]] = []
+        gh_calls: list[list[str]] = []
+
+        def fake_git(repo: Path, args: list[str], timeout: int = 120):
+            git_calls.append(args)
+            proc = subprocess.CompletedProcess(args, 0, "", "")
+            if args[:2] == ["rev-parse", "--abbrev-ref"]:
+                proc.stdout = "cursor/spotify-widget-abcd\n"
+            elif args[:2] == ["config", "--get"]:
+                proc.stdout = "cursor\n"
+            return proc
+
+        def fake_run(cmd, **kwargs):
+            gh_calls.append(list(cmd))
+            proc = subprocess.CompletedProcess(cmd, 0, "", "")
+            joined = " ".join(cmd)
+            if cmd[:3] == ["gh", "pr", "view"] and "mergeCommit" in joined:
+                proc.stdout = json.dumps(
+                    {
+                        "state": "MERGED",
+                        "baseRefName": "main",
+                        "url": "https://github.com/max1millions/SCHEMA/pull/9",
+                        "mergeCommit": {"oid": "abc123def4567890"},
+                    }
+                )
+            elif cmd[:3] == ["gh", "pr", "view"]:
+                proc.stdout = json.dumps(
+                    {
+                        "url": "https://github.com/max1millions/SCHEMA/pull/9",
+                        "state": "OPEN",
+                    }
+                )
+            elif cmd[:3] == ["gh", "pr", "merge"]:
+                proc.stdout = ""
+            return proc
+
+        with patch("codeflow.chat_branch.git_run", side_effect=fake_git):
+            with patch("codeflow.chat_branch.subprocess.run", side_effect=fake_run):
+                result = chat_branch.merge_branch(
+                    Path("/tmp/schema"),
+                    repo="SCHEMA",
+                    branch="cursor/spotify-widget-abcd",
+                    title="spotify",
+                )
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(result["merged"])
+        self.assertEqual(result["merge_sha"], "abc123def4567890")
+        self.assertIn("on GitHub", result["summary"])
+        merge_cmds = [c for c in gh_calls if c[:3] == ["gh", "pr", "merge"]]
+        self.assertEqual(len(merge_cmds), 1)
+        self.assertIn("--merge", merge_cmds[0])
+        local_feature_merges = [
+            args
+            for args in git_calls
+            if args and args[0] == "merge" and "cursor/spotify-widget-abcd" in args
+        ]
+        self.assertEqual(local_feature_merges, [])
+        self.assertIn(["merge", "--ff-only", "origin/main"], git_calls)
+
 
 class PrePushHookTests(unittest.TestCase):
     def _run(self, repo: Path, remote_ref: str) -> subprocess.CompletedProcess[str]:
