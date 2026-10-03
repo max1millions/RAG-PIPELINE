@@ -48,6 +48,17 @@ class TemplateMatchTests(unittest.TestCase):
             "This is an environment issue, not a repo patch.",
         )
 
+    def test_pull_all_master_branch(self):
+        rec = _cron(
+            "cron_pull_all",
+            "OTHER-SCRIPTS",
+            message="1 pull/submodule failure(s): FAIL RAG-PIPELINE (master). See pull-all.log",
+            raw_stderr_tail="FAIL RAG-PIPELINE (origin/master --ff-only)",
+        )
+        hit = match_incident_template(rec, "Hey Max,")
+        assert hit is not None
+        self.assertIn("the RAG-PIPELINE repo", hit["user_message"])
+
     def test_pull_all_two_repos(self):
         rec = _cron(
             "cron_pull_all",

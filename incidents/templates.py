@@ -13,8 +13,9 @@ from typing import Any
 
 FIX_HOST = "host"
 
+# Pull-all logs the configured branch (main, master, …) or "submodules".
 _PULL_FAIL = re.compile(
-    r"FAIL\s+(.+?)\s+\((?:main|submodules|origin/main --ff-only)\)"
+    r"FAIL\s+(.+?)\s+\((?:submodules|origin/[A-Za-z0-9._/-]+ --ff-only|[A-Za-z0-9._/-]+)\)"
 )
 _PROD_API_SERVICE = re.compile(r"service=([a-z0-9._-]+)", re.I)
 _API_LABELS = {
