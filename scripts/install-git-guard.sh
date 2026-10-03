@@ -10,6 +10,7 @@ set -euo pipefail
 STACK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="${STACK_ROOT}/scripts/openclaw-git-guard"
 HOOKS="${HOME}/.openclaw/git-hooks"
+BIN_GIT="${HOME}/.openclaw/bin/git"
 WS="${HOME}/.openclaw/workspace"
 PIPELINE_REPOS=(
   CIS-NET-AUTOMATION
@@ -30,6 +31,12 @@ install_hooks() {
   cp "${SRC}/pre-push" "${HOOKS}/pre-push"
   cp "${SRC}/pull-allowed.sh" "${HOOKS}/pull-allowed.sh"
   chmod +x "${HOOKS}/pre-push" "${HOOKS}/pull-allowed.sh"
+  if [[ -f "${SRC}/git" ]]; then
+    mkdir -p "$(dirname "${BIN_GIT}")"
+    cp "${SRC}/git" "${BIN_GIT}"
+    chmod +x "${BIN_GIT}"
+    echo "OK    git wrapper installed at ${BIN_GIT}"
+  fi
   echo "OK    hooks installed in ${HOOKS}"
 }
 

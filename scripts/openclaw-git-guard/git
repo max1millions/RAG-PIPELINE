@@ -1,0 +1,238 @@
+#!/bin/sh
+# Git wrapper: pull/fetch/merge allowlist plus push-branch allowlist.
+# Installed at ~/.openclaw/bin/git — must be ahead of /usr/bin in PATH.
+#
+# Pipeline repos (hooks.allowed-push-branch=cursor) may push cursor/* only.
+# Main-only repos (hooks.allowed-push-branch=main) may push main only.
+# Repos with no hooks.allowed-push-branch (RAG-PIPELINE, and so on) are unchanged.
+# Merging a cursor branch into main is done on GitHub (gh pr merge), not by
+# pushing main or merging the chat branch locally.
+REAL_GIT=/usr/bin/git
+GIT_BIN="$REAL_GIT"
+
+# Resolve -C <dir> so checks use the target repo, not the shell cwd.
+GIT_CWD=""
+arg_i=1
+while [ $arg_i -le $# ]; do
+  eval "arg=\$$arg_i"
+  case "$arg" in
+    -C)
+      next=$((arg_i + 1))
+      eval "GIT_CWD=\$$next"
+      arg_i=$((arg_i + 2))
+      ;;
+    -c|--namespace|--git-dir|--work-tree)
+      arg_i=$((arg_i + 2))
+      ;;
+    --git-dir=*|--work-tree=*|--namespace=*)
+      arg_i=$((arg_i + 1))
+      ;;
+    pull|fetch|merge|push)
+      break
+      ;;
+    *)
+      exec "$REAL_GIT" "$@"
+      ;;
+  esac
+done
+
+. "${HOME}/.openclaw/git-hooks/pull-allowed.sh"
+
+check_pull_branch() {
+  branch="$1"
+  if pull_allowed "$branch"; then
+    return 0
+  fi
+  echo "BLOCKED: pull from origin/$branch not allowed (only $(pull_allowed_message))" >&2
+  return 1
+}
+
+check_fetch_branch() {
+  branch="$1"
+  if pull_allowed "$branch"; then
+    return 0
+  fi
+  echo "BLOCKED: fetch origin/$branch not allowed (only $(pull_allowed_message))" >&2
+  return 1
+}
+
+_git_cfg() {
+  if [ -n "${GIT_CWD:-}" ]; then
+    "$REAL_GIT" -C "$GIT_CWD" "$@"
+  else
+    "$REAL_GIT" "$@"
+  fi
+}
+
+valid_cursor_branch() {
+  echo "$1" | grep -Eq '^cursor/[a-z0-9][a-z0-9._-]{0,80}$'
+}
+
+# Destination branch of `git push`, or empty when it cannot be named yet.
+push_destination() {
+  remote=""
+  refspec=""
+  while [ $arg_i -le $# ]; do
+    eval "arg=\$$arg_i"
+    case "$arg" in
+      --all|--mirror)
+        echo "BLOCKED: git push --all is not allowed" >&2
+        return 2
+        ;;
+      --no-verify)
+        echo "BLOCKED: --no-verify is not allowed" >&2
+        return 2
+        ;;
+      --delete|-d|-u|--set-upstream|--dry-run|--porcelain|-q|--quiet|-v|--verbose|--progress|--no-progress|--follow-tags|--atomic|--signed|--no-signed)
+        arg_i=$((arg_i + 1))
+        ;;
+      -f|--force|--force-with-lease|--force-if-includes)
+        echo "BLOCKED: force-push is not allowed" >&2
+        return 2
+        ;;
+      --receive-pack|--exec|--repo)
+        arg_i=$((arg_i + 2))
+        ;;
+      --receive-pack=*|--exec=*|--repo=*)
+        arg_i=$((arg_i + 1))
+        ;;
+      -*)
+        arg_i=$((arg_i + 1))
+        ;;
+      *)
+        if [ -z "$remote" ]; then
+          remote="$arg"
+        elif [ -z "$refspec" ]; then
+          refspec="$arg"
+        fi
+        arg_i=$((arg_i + 1))
+        ;;
+    esac
+  done
+
+  dest="$refspec"
+  case "$dest" in
+    ""|HEAD)
+      dest="$(_git_cfg rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+      ;;
+    +*)
+      dest="${dest#+}"
+      ;;
+  esac
+  case "$dest" in
+    *:*)
+      dest="${dest#*:}"
+      ;;
+  esac
+  case "$dest" in
+    refs/heads/*)
+      dest="${dest#refs/heads/}"
+      ;;
+  esac
+  printf '%s' "$dest"
+  return 0
+}
+
+check_push_branch() {
+  allowed="$(_git_cfg config --get hooks.allowed-push-branch 2>/dev/null || true)"
+  # Repos outside the pipeline matrix are not push-restricted here.
+  if [ -z "$allowed" ]; then
+    return 0
+  fi
+  dest="$(push_destination "$@")" || return 1
+  if [ -z "$dest" ] || [ "$dest" = "HEAD" ]; then
+    echo "BLOCKED: could not tell which branch this push targets" >&2
+    return 1
+  fi
+  if [ "$allowed" = "main" ]; then
+    if [ "$dest" != "main" ]; then
+      echo "BLOCKED: push to ${dest} not allowed (only main)" >&2
+      return 1
+    fi
+    return 0
+  fi
+  if valid_cursor_branch "$dest"; then
+    return 0
+  fi
+  echo "BLOCKED: push to ${dest} not allowed (only cursor/* chat branches; merge them on GitHub with orion-merge)" >&2
+  return 1
+}
+
+# Find pull/fetch/merge/push without mutating "$@" (supports git -C <dir> …).
+subcmd=""
+arg_i=1
+while [ $arg_i -le $# ]; do
+  eval "arg=\$$arg_i"
+  case "$arg" in
+    -C|-c|--namespace|--git-dir|--work-tree)
+      arg_i=$((arg_i + 2))
+      ;;
+    --git-dir=*|--work-tree=*|--namespace=*)
+      arg_i=$((arg_i + 1))
+      ;;
+    pull|fetch|merge|push)
+      subcmd="$arg"
+      arg_i=$((arg_i + 1))
+      break
+      ;;
+    *)
+      exec "$REAL_GIT" "$@"
+      ;;
+  esac
+done
+
+case "${subcmd}" in
+  pull)
+    rest=$(( $# - arg_i + 1 ))
+    if [ $rest -ge 1 ]; then
+      eval "a1=\$$arg_i"
+      if [ "$a1" = "origin" ] && [ $rest -ge 2 ]; then
+        next=$((arg_i + 1))
+        eval "a2=\$$next"
+        check_pull_branch "$a2" || exit 1
+      elif [ $rest -eq 1 ]; then
+        case "$a1" in
+          -*) ;; # flags (--dry-run, --rebase, etc.)
+          origin) ;; # git pull origin (uses upstream)
+          *)
+            check_pull_branch "$a1" || exit 1
+            ;;
+        esac
+      fi
+    fi
+    ;;
+  fetch)
+    rest=$(( $# - arg_i + 1 ))
+    if [ $rest -ge 2 ]; then
+      eval "a1=\$$arg_i"
+      next=$((arg_i + 1))
+      eval "a2=\$$next"
+      if [ "$a1" = "origin" ] && [ -n "$a2" ]; then
+        case "$a2" in
+          *:*) ;; # refspec
+          *) check_fetch_branch "$a2" || exit 1 ;;
+        esac
+      fi
+    fi
+    ;;
+  merge)
+    while [ $arg_i -le $# ]; do
+      eval "arg=\$$arg_i"
+      case "$arg" in
+        origin/*)
+          branch="${arg#origin/}"
+          if ! pull_allowed "$branch"; then
+            echo "BLOCKED: merge $arg not allowed (only $(pull_allowed_message))" >&2
+            exit 1
+          fi
+          ;;
+      esac
+      arg_i=$((arg_i + 1))
+    done
+    ;;
+  push)
+    check_push_branch "$@" || exit 1
+    ;;
+esac
+
+exec "$REAL_GIT" "$@"
