@@ -116,6 +116,7 @@ def invoke_fix(
     incident_fingerprint: str = "",
     backend: str | None = None,
     target: str | None = None,
+    session_id: str = "",
 ) -> dict[str, Any]:
     require_feature("langgraph_multiagent", "LangGraph multi-agent")
 
@@ -161,6 +162,7 @@ def invoke_fix(
         "force_push": push,
         "code_backend": code_backend,
         "fix_target": fix_target,
+        "session_id": session_id,
     }
     if test_cmd:
         initial["test_cmd_override"] = test_cmd
@@ -209,7 +211,12 @@ def main() -> int:
     parser.add_argument("request", nargs="?", help="Natural language fix request")
     parser.add_argument("--repo", help="REPOS subdirectory name (or Mac-only module)")
     parser.add_argument("--from-incident", dest="from_incident", help="Incident fingerprint prefix")
-    parser.add_argument("--push", action="store_true", help="Push to origin/orion after commit")
+    parser.add_argument("--push", action="store_true", help="Push the chat branch after commit")
+    parser.add_argument(
+        "--session-id",
+        default="",
+        help="OpenClaw session id (default: current iMessage chat). /new starts a new branch.",
+    )
     parser.add_argument("--no-rag", action="store_true", help="Skip upfront RAG queries")
     parser.add_argument("--test-cmd", help="Override test command")
     parser.add_argument("--test-file", help="Run pytest/syntax on a specific file")
@@ -279,6 +286,7 @@ def main() -> int:
             plan_path=args.plan,
             backend=args.backend,
             target=args.target,
+            session_id=args.session_id,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

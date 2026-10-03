@@ -21,7 +21,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Orion LangGraph code change runner")
     parser.add_argument("request", help="Natural language code change request")
     parser.add_argument("--repo", required=True, help="REPOS subdirectory name, e.g. CWR-INTERFACE")
-    parser.add_argument("--push", action="store_true", help="Push to origin/orion after commit")
+    parser.add_argument("--push", action="store_true", help="Push the chat branch after commit")
     parser.add_argument("--test-cmd", help="Override test command")
     parser.add_argument("--test-file", help="Run tests on a specific file")
     parser.add_argument("--json", action="store_true", help="JSON output")

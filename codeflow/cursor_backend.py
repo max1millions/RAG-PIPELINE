@@ -39,6 +39,7 @@ def build_brief(
     """Assemble the Cursor agent prompt. Orion owns commit/push after the run."""
     parts = [
         "You are the coding worker for Orion (RightsTune operator agent).",
+        "The working tree is already on this chat's git branch. Do not checkout, commit, or push.",
         "Orion owns git commit, push, and PR creation — do NOT commit or push.",
         "Do NOT read, print, or edit .env files or credential files.",
         "Stay inside the workspace cwd only. Prefer minimal, correct edits.",

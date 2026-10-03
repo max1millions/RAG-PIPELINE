@@ -156,11 +156,14 @@ class PlanFlagE2ETests(unittest.TestCase):
                     plan_path=str(self.plan_path),
                     rag_context="",
                     db_context="",
+                    backend="langgraph",
+                    session_id="11111111-2222-3333-4444-55555555abcd",
                 )
 
         hello = (self.repo_path / "hello.py").read_text(encoding="utf-8")
         self.assertIn('"""Greeting helper."""', hello)
         self.assertTrue(final.get("approved") or final.get("commit_sha"))
+        self.assertTrue(str(final.get("push_branch") or "").startswith("cursor/"))
         self.assertEqual(final.get("plan_path"), str(self.plan_path.resolve()))
         self.assertNotIn("Planner agent", " ".join(llm_calls))
 

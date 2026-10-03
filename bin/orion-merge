@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+STACK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$HOME/.openclaw/bin:$PATH"
+cd "$STACK_ROOT"
+exec "$STACK_ROOT/.venv/bin/python" -m codeflow.chat_branch_cli merge "$@"

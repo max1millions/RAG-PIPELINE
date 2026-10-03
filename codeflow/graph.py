@@ -13,11 +13,18 @@ from codeflow.nodes import (
     finalize_error_node,
     git_commit_node,
     planner_node,
+    prepare_branch_node,
     review_node,
     syntax_check_node,
     test_run_node,
     triage_node,
 )
+
+
+def _route_after_prepare(state: AgentState) -> str:
+    if state.get("error"):
+        return "fail"
+    return "triage"
 
 
 def _route_after_triage(state: AgentState) -> str:
@@ -61,6 +68,7 @@ def build_graph(*, backend: str | None = None):
     del backend  # resolved in invoke_fix → initial state
     g = StateGraph(AgentState)
 
+    g.add_node("prepare", prepare_branch_node)
     g.add_node("triage", triage_node)
     g.add_node("fetch_rag", fetch_rag_node)
     g.add_node("planner", planner_node)
@@ -73,7 +81,12 @@ def build_graph(*, backend: str | None = None):
     g.add_node("commit", git_commit_node)
     g.add_node("fail", finalize_error_node)
 
-    g.add_edge(START, "triage")
+    g.add_edge(START, "prepare")
+    g.add_conditional_edges(
+        "prepare",
+        _route_after_prepare,
+        {"triage": "triage", "fail": "fail"},
+    )
     g.add_edge("triage", "fetch_rag")
     g.add_conditional_edges(
         "fetch_rag",

@@ -1,0 +1,33 @@
+#!/bin/sh
+# Pipeline repos push chat branches (cursor/*) only.
+# Main-only repos (hooks.allowed-push-branch=main) push main only.
+allowed="$(git config --get hooks.allowed-push-branch 2>/dev/null || echo cursor)"
+
+valid_cursor_ref() {
+  case "$1" in
+    refs/heads/cursor/*)
+      name="${1#refs/heads/}"
+      echo "$name" | grep -Eq '^cursor/[a-z0-9][a-z0-9._-]{0,80}$' || return 1
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+while read local_ref local_sha remote_ref remote_sha; do
+  if [ "$allowed" = "main" ]; then
+    if [ "$remote_ref" != "refs/heads/main" ]; then
+      echo "BLOCKED: push to ${remote_ref} not allowed (only refs/heads/main)" >&2
+      exit 1
+    fi
+    continue
+  fi
+  if valid_cursor_ref "$remote_ref"; then
+    continue
+  fi
+  echo "BLOCKED: push to ${remote_ref} not allowed (only refs/heads/cursor/* chat branches)" >&2
+  exit 1
+done
+exit 0
