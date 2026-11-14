@@ -92,7 +92,9 @@ def should_notify(
     ``RESOLVED`` / ``ANOMALY_RESOLVED`` can notify once more when the failure
     actually comes back (a different ``ts``, or a watchdog call with no
     ``new_detected_at``). The same resolved row does not.
-    A failed send (no ``last_notified_at``) may retry until one delivery.
+    A failed send is not retried on the next poll. The CLI can exit non-zero
+    after iMessage has already delivered, and retrying that state texted the
+    same incident every five minutes.
     """
     del renotify_every, renotify_hours  # open incidents are not repeated on a timer
     if record is None:
@@ -108,7 +110,7 @@ def should_notify(
     if record.get("last_notified_at"):
         return False, "already_notified"
     if state in ("ESCALATED", "ANOMALY_ESCALATED"):
-        return True, "escalated_retry"
+        return False, "escalated_once"
     if state in ("DETECTED", "ANOMALY_OPEN"):
         return True, "new"
     return False, "already_notified"
@@ -139,6 +141,51 @@ def _new_detected_record(normalized: dict[str, Any], *, now: str) -> dict[str, A
     }
 
 
+def _same_tool_already_open(incidents: dict[str, Any], tool: str, fingerprint: str) -> bool:
+    """True when this tool already has an incident that is not resolved.
+
+    One MLC run used to open a new fingerprint per attempt (the portal URL
+    changes) and each of those texted. While one is open, later fingerprints
+    for the same tool stay quiet.
+    """
+    if not tool:
+        return False
+    closed = {"RESOLVED", "ANOMALY_RESOLVED", "FIXED"}
+    for fp, rec in incidents.items():
+        if fp == fingerprint or not isinstance(rec, dict):
+            continue
+        if str(rec.get("tool") or "") != tool:
+            continue
+        if rec.get("state") in closed:
+            continue
+        return True
+    return False
+
+
+def _suppress_for_open_tool(
+    incidents: dict[str, Any],
+    normalized: dict[str, Any],
+    existing: dict[str, Any] | None,
+    *,
+    now: str,
+) -> tuple[dict[str, Any], bool, str] | None:
+    tool = str(normalized.get("tool") or "")
+    fp = str(normalized.get("fingerprint") or "")
+    if not _same_tool_already_open(incidents, tool, fp):
+        return None
+    if existing is None:
+        record = _new_detected_record(normalized, now=now)
+        record["state"] = "NOTIFIED"
+        record["last_notified_at"] = now
+        record["suppressed_reason"] = "open_tool_incident"
+        incidents[fp] = record
+        return record, False, "open_tool_incident"
+    existing["seen_count"] = int(existing.get("seen_count") or 0) + 1
+    existing["updated_at"] = now
+    existing["suppressed_reason"] = "open_tool_incident"
+    return existing, False, "open_tool_incident"
+
+
 def upsert_from_mac(
     active: dict[str, Any],
     normalized: dict[str, Any],
@@ -158,6 +205,11 @@ def upsert_from_mac(
     )
 
     now = _utc_now_iso()
+    if notify:
+        suppressed = _suppress_for_open_tool(incidents, normalized, existing, now=now)
+        if suppressed is not None:
+            return suppressed
+
     if existing is None:
         record = _new_detected_record(normalized, now=now)
         incidents[fp] = record

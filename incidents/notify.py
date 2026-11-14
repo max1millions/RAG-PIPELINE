@@ -106,6 +106,33 @@ def format_message(record: dict[str, Any]) -> str:
     return text[:320]
 
 
+_BENIGN_CLI_WARNING = re.compile(
+    r"state-migrations|Legacy state migration warnings",
+    re.IGNORECASE,
+)
+_HARD_SEND_FAILURE = re.compile(
+    r"\b(unauthorized|forbidden|not found|ECONNREFUSED|timed out|timeout)\b",
+    re.IGNORECASE,
+)
+
+
+def delivery_failure(returncode: int, stdout: str, stderr: str) -> str | None:
+    """Return an error string, or None when the text was delivered.
+
+    ``openclaw message send`` can exit non-zero after iMessage has already
+    delivered, because it prints a legacy state-migration warning on stderr.
+    Treating that as failure marked the incident ESCALATED, and the next poll
+    texted the same incident again.
+    """
+    if returncode == 0:
+        return None
+    err = (stderr or "").strip()
+    out = (stdout or "").strip()
+    if _BENIGN_CLI_WARNING.search(err) and not _HARD_SEND_FAILURE.search(err):
+        return None
+    return (err or out or str(returncode))[:200]
+
+
 def _send_bluebubbles(
     targets: list[str],
     text: str,
@@ -135,9 +162,9 @@ def _send_bluebubbles(
         except subprocess.TimeoutExpired:
             errors.append(f"{target}: timeout")
             continue
-        if proc.returncode != 0:
-            err = (proc.stderr or proc.stdout or "").strip()[:200]
-            errors.append(f"{target}: {err or proc.returncode}")
+        failure = delivery_failure(proc.returncode, proc.stdout or "", proc.stderr or "")
+        if failure:
+            errors.append(f"{target}: {failure}")
 
     if errors:
         return False, "; ".join(errors)

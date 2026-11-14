@@ -10,6 +10,7 @@ from incidents.fsm import (
     upsert_from_mac,
 )
 from incidents.ingest import _message_from_stdio
+from incidents.notify import delivery_failure
 
 
 def _norm(**overrides):
@@ -106,6 +107,21 @@ class ShouldNotifyTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(reason, "reopened")
 
+    def test_escalated_send_does_not_text_again(self):
+        rec = {
+            "state": "ESCALATED",
+            "detected_at": "2026-08-06T07:01:17+00:00",
+            "escalation_reason": "state-migrations warning",
+        }
+        ok, reason = should_notify(
+            rec,
+            renotify_every=1,
+            renotify_hours=0,
+            new_detected_at="2026-08-06T08:00:00+00:00",
+        )
+        self.assertFalse(ok)
+        self.assertEqual(reason, "escalated_once")
+
     def test_resolved_without_new_ts_legacy_reopen(self):
         # Watchdog callers omit new_detected_at.
         rec = {"state": "RESOLVED", "detected_at": "2026-08-06T07:01:17+00:00"}
@@ -173,6 +189,48 @@ class UpsertFromMacTests(unittest.TestCase):
 
         self.assertEqual(rec["seen_count"], 4)
         self.assertEqual(rec["detected_at"], "2026-08-06T07:01:17+00:00")
+
+    def test_same_tool_second_fingerprint_does_not_text(self):
+        active: dict = {"incidents": {}}
+        rec, notify, _ = upsert_from_mac(
+            active, _norm(), renotify_every=10, renotify_hours=24
+        )
+        self.assertTrue(notify)
+        mark_notified(rec)
+        _, notify2, reason2 = upsert_from_mac(
+            active,
+            _norm(
+                fingerprint="ffffffffffffffff",
+                detected_at="2026-08-06T09:00:00+00:00",
+                message="a later attempt of the same job",
+            ),
+            renotify_every=10,
+            renotify_hours=24,
+        )
+        self.assertFalse(notify2)
+        self.assertEqual(reason2, "open_tool_incident")
+
+    def test_different_tool_still_texts(self):
+        active: dict = {"incidents": {}}
+        rec, _, _ = upsert_from_mac(active, _norm(), renotify_every=10, renotify_hours=24)
+        mark_notified(rec)
+        _, notify2, reason2 = upsert_from_mac(
+            active,
+            _norm(fingerprint="eeeeeeeeeeeeeeee", tool="cron_email_reader"),
+            renotify_every=10,
+            renotify_hours=24,
+        )
+        self.assertTrue(notify2)
+        self.assertEqual(reason2, "new")
+
+
+class DeliveryFailureTests(unittest.TestCase):
+    def test_migration_warning_after_delivery_is_success(self):
+        warning = "[state-migrations] Legacy state migration warnings:\n"
+        self.assertIsNone(delivery_failure(1, "", warning))
+
+    def test_real_send_failure_is_reported(self):
+        self.assertIsNotNone(delivery_failure(1, "", "unauthorized"))
 
     def test_resolved_same_event_stays_resolved(self):
         active: dict = {"incidents": {}}
