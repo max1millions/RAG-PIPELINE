@@ -11,6 +11,9 @@ features:
   incidents_notify: true      # BlueBubbles/iMessage alerts on new failures
   auto_fix_incidents: false   # KEEP OFF — generic Mac incidents stay notify-only
   cwr_auto_fix_incidents: false  # CWR-INTERFACE code bugs: enable in private overlay
+  # Allowlisted code incidents only. Public default off. Also requires
+  # mac_sandbox.enabled in the overlay. Does not turn on auto_fix_incidents.
+  mac_sandbox_auto_fix: false
   auto_push_orion: true       # legacy name: auto-push the chat branch (cursor/*), not a shared orion branch
   auto_pr: true
   local_web: true

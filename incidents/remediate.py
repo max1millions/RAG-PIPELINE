@@ -1,4 +1,8 @@
-"""Auto-remediate incidents via orion-fix."""
+"""Auto-remediate incidents via orion-fix.
+
+Mac-origin incidents stay refused here. Allowlisted code incidents use
+``incidents.sandbox_remediate`` instead, which never calls this function.
+"""
 
 from __future__ import annotations
 

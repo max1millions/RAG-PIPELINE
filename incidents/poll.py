@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from codeflow.mac_sandbox import sandbox_handoff_allowed
 from common.config import feature_enabled
 from incidents.fsm import (
     load_active,
@@ -25,6 +26,7 @@ from incidents.interpret import (
 from incidents.mcp_client import fetch_recent_errors_sync
 from incidents.notify import send_notifications
 from incidents.remediate import remediate_record
+from incidents.sandbox_remediate import sandbox_remediate_record
 from incidents.settings import load_incidents_config
 
 
@@ -177,7 +179,59 @@ def run_poll(*, dry_run: bool = False) -> dict[str, Any]:
                 )
             continue
 
-        # Mac / cron / API gateway: notify-only (no Cursor remediation on Mac Mini).
+        # Allowlisted code incidents can go to the sandboxed Mac agent.
+        # Host, portal, and credential incidents stay on the notify path.
+        # This does not use the unsandboxed Mac bridge.
+        if sandbox_handoff_allowed(record, reason):
+            record["user_message"] = with_fixing_clause(record["user_message"])
+            repo_name = str(record.get("repos_name") or "")
+            if notify or dry_run:
+                if not dry_run:
+                    mark_notifying(record)
+                ok, detail = send_notifications(record, dry_run=dry_run)
+                if ok:
+                    if not dry_run:
+                        mark_notified(record)
+                    result["notified"].append(
+                        {
+                            "fingerprint": fp[:8],
+                            "reason": reason,
+                            "detail": detail,
+                            "fix_target": interp["fix_target"],
+                        }
+                    )
+                else:
+                    if not dry_run:
+                        mark_escalated(record, detail)
+                    result["errors"].append(f"notify {fp[:8]}: {detail}")
+                    continue
+            if dry_run:
+                result["remediated"].append(
+                    {
+                        "fingerprint": fp[:8],
+                        "reason": reason,
+                        "detail": f"DRY-RUN would sandbox-handoff {repo_name}",
+                        "fix_target": interp["fix_target"],
+                    }
+                )
+                continue
+            fix_result = sandbox_remediate_record(record)
+            if fix_result.get("ok"):
+                result["remediated"].append(
+                    {
+                        "fingerprint": fp[:8],
+                        "reason": reason,
+                        "detail": fix_result.get("summary") or fix_result.get("pr_url"),
+                        "fix_target": interp["fix_target"],
+                    }
+                )
+            else:
+                result["errors"].append(
+                    f"sandbox {fp[:8]}: {fix_result.get('error', 'unknown')}"
+                )
+            continue
+
+        # Mac / cron / API gateway: notify-only (no unsandboxed Cursor on the Mac Mini).
         if would_auto_fix and not notify_only:
             if dry_run:
                 result["remediated"].append(
