@@ -144,7 +144,21 @@ The Chroma index is kept fresh without manual `orion-rag-index` runs in three si
 
 All three reuse the existing incremental manifest (`rag/index_manifest.json`), so only changed files are re-embedded. Deploy and hook paths scope to `repos`/`docs` only (`sql` included for `SQL-SCRIPTS`). A full `orion-rag-index --reset --no-incremental` is still the right tool after large restructures or manifest corruption.
 
-Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `bluebubbles` (OpenClaw iMessage). Each open fingerprint is texted **once** until it is resolved (a newer Mac jsonl `ts`, an in-progress auto-fix, or the 5-minute poll does not send another text).
+Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `bluebubbles` (OpenClaw iMessage). Each open fingerprint is texted **once** until it is resolved (a newer Mac jsonl `ts`, an in-progress auto-fix, or the 5-minute poll does not send another text). Fingerprints drop URLs and HubSpot tokens first, so those retries stay one incident.
+
+### Sandboxed Mac handoff
+
+`features.mac_sandbox_auto_fix` (public default **false**) lets the poll hand an allowlisted **code** incident to a Cursor agent on this Mac. `features.auto_fix_incidents` stays off. Host, portal, and credential incidents are still iMessage-only.
+
+OpenClaw SSHs as `cursor-worker`. That account's sshd `ForceCommand` is `scripts/orion-mac-handoff`. The agent runs under `config/cursor-worker.sb` against a fresh clone, not `~/Developer`. The profile denies `/Users/origin` and the worker's key directories. Outbound from the sandbox is HTTPS and DNS only (`sandbox-exec` on this Mac cannot name a single remote host). The wrapper pushes `cursor/incident-<fp>` and opens a PR. It does not push `main`, and it does not pass `--trust` or `--force`.
+
+One-time setup (does not enable the flag and does not copy secrets):
+
+```bash
+sudo ./scripts/setup-cursor-worker.sh
+```
+
+Then fill in the key files named at the top of that script, set `cursor_agent_bin`, and turn on `enabled` in the installed `mac_sandbox.yaml` plus the overlay copy and `features.mac_sandbox_auto_fix`.
 
 ### BlueBubbles texts in Orion memory
 
