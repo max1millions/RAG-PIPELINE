@@ -150,7 +150,7 @@ Incident notify backend (`incidents.yaml` in overlay): `log` (stdout only) or `b
 
 `features.mac_sandbox_auto_fix` (public default **false**) lets the poll hand an allowlisted **code** incident to a Cursor agent on this Mac. `features.auto_fix_incidents` stays off. Host, portal, and credential incidents are still iMessage-only.
 
-OpenClaw SSHs as `cursor-worker`. That account's sshd `ForceCommand` is `scripts/orion-mac-handoff`. The agent runs under `config/cursor-worker.sb` against a fresh clone, not `~/Developer`. The profile denies `/Users/origin` and the worker's key directories. Outbound from the sandbox is HTTPS and DNS only (`sandbox-exec` on this Mac cannot name a single remote host). The wrapper pushes `cursor/incident-<fp>` and opens a PR. It does not push `main`, and it does not pass `--trust` or `--force`.
+OpenClaw SSHs as `cursor-worker`. That account's sshd `ForceCommand` is `scripts/orion-mac-handoff`. The agent runs under `config/cursor-worker.sb` against a fresh clone, not `~/Developer`. The profile denies the operator home (`/Users/YOU`) and the worker's key directories. Outbound from the sandbox is HTTPS and DNS only (`sandbox-exec` on this Mac cannot name a single remote host). The wrapper pushes `cursor/incident-<fp>` and opens a PR. It does not push `main`, and it does not pass `--trust` or `--force`.
 
 One-time setup (does not enable the flag and does not copy secrets):
 
