@@ -158,7 +158,7 @@ One-time setup (does not enable the flag and does not copy secrets):
 sudo ./scripts/setup-cursor-worker.sh
 ```
 
-Then fill in the key files named at the top of that script, set `cursor_agent_bin`, and turn on `enabled` in the installed `mac_sandbox.yaml` plus the overlay copy and `features.mac_sandbox_auto_fix`.
+The script writes `denied_home` from the sudo user's home into the installed `mac_sandbox.yaml`. Then fill in the key files named at the top of that script, set `cursor_agent_bin`, and turn on `enabled` in that file plus the overlay copy and `features.mac_sandbox_auto_fix`.
 
 ### BlueBubbles texts in Orion memory
 

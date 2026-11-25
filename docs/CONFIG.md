@@ -17,6 +17,7 @@ How configuration is loaded and merged. Background: [DECISIONS.md §1](./DECISIO
 | `config/features.yaml` | `config/features.yaml` | All modules |
 | `config/.env.example` | `config/.env` | Secrets, MySQL |
 | `config/incidents.example.yaml` | `config/incidents.yaml` | Incidents, notify |
+| `config/mac_sandbox.example.yaml` | `config/mac_sandbox.yaml` | Sandboxed Mac handoff (`cursor-worker` SSH). Public `enabled: false`. `denied_home` is `/Users/YOU` until `scripts/setup-cursor-worker.sh` writes the sudo user's home |
 | `config/path_map.example.yaml` | `config/path_map.yaml` | MCP ingest |
 | `config/watchdog.example.yaml` | `config/watchdog.yaml` | SQL checks |
 | `config/repo_tests.example.yaml` | `config/repo_tests.yaml` | orion-fix tests |
@@ -45,7 +46,7 @@ See [README.md](../README.md#automatic-reindexing).
 | `ORION_OVERLAY_ROOT` | Overlay directory |
 | `ORION_RAG_HYBRID` | Force BM25+vector hybrid |
 | `ANTHROPIC_API_KEY` | Claude LangGraph fallback (overlay `.env`) |
-| `CURSOR_API_KEY` | Cursor Agent for `orion-fix --backend=cursor` |
+| `CURSOR_API_KEY` | Cursor Agent for `orion-fix --backend=cursor`. The Mac handoff does not read this variable. Its key file lives on `cursor-worker` and is denied to the agent by `config/cursor-worker.sb` |
 | `MYSQL_*` | Local MySQL |
 | `OPENCLAW_TOKEN` | iMessage notify (cron) |
 

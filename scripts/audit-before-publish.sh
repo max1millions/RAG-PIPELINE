@@ -33,6 +33,7 @@ _filter_allowlist() {
     -e 'SECURITY\.md:' \
     -e '/Users/YOU(/|$|[^a-zA-Z])' \
     -e '/Users/YOUR_USER(/|$|[^a-zA-Z])' \
+    -e '/Users/cursor-worker(/|$|[^a-zA-Z])' \
     -e '/home/YOUR_USER(/|$|[^a-zA-Z])' \
     -e '/home/you(/|$|[^a-zA-Z])' \
     -e 'max@rightstune\.com' \
@@ -77,7 +78,8 @@ _grep "phone numbers" '\+1[0-9]{10}' "*.yaml" "*.yml" "*.py" "*.sh" "*.md" "*.tx
 # Personal emails (non-placeholder patterns)
 _grep "personal/production emails" '[a-zA-Z0-9._%+-]+@(rightstune|example-private|yourcompany)\.(com|io|net)' "*.yaml" "*.yml" "*.py" "*.sh" "*.md"
 
-# Mac absolute production paths (placeholders /Users/YOU and /Users/YOUR_USER allowed)
+# Mac absolute paths. Placeholders /Users/YOU and /Users/YOUR_USER are allowed.
+# /Users/cursor-worker is the handoff role account from setup-cursor-worker.sh.
 _grep "Mac production paths (/Users/)" '/Users/[a-zA-Z]' "*.yaml" "*.yml" "*.py" "*.sh" "*.md" "*.txt"
 
 # Anthropic API keys (placeholder sk-ant-api03-REPLACE* allowed)

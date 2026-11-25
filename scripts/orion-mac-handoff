@@ -1,0 +1,409 @@
+#!/usr/bin/env python3
+"""ForceCommand entry for the sandboxed Cursor handoff.
+
+sshd runs this as ``cursor-worker`` and nothing else. ``SSH_ORIGINAL_COMMAND``
+must be ``orion-mac-handoff <repo>``. The brief is one JSON object on stdin.
+
+This process may read the Cursor API key, the git key, and the GitHub token.
+The cursor-agent child cannot. Its home is an empty temp directory, its
+environment does not include the git key or the GitHub token, and
+``sandbox-exec`` denies ``denied_home`` from the handoff config, plus the secret directories.
+``--trust`` and ``--force`` are not passed.
+
+The wrapper commits and pushes ``cursor/incident-<fp>`` and opens a PR.
+It never pushes ``main`` and it never runs a statement importer.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+_HERE = Path(__file__).resolve().parent
+for _candidate in (_HERE, _HERE.parent / "codeflow"):
+    if (_candidate / "sandbox_policy.py").is_file():
+        sys.path.insert(0, str(_candidate))
+        break
+
+from sandbox_policy import (  # noqa: E402
+    PolicyError,
+    agent_environment,
+    assert_outside_origin,
+    configure_denied_home,
+    assert_push_branch,
+    branch_for,
+    check_diff_size,
+    check_paths,
+    diff_totals,
+    parse_handoff_config,
+    redact,
+    scan_text,
+    secret_file_mode_ok,
+    validate_git_url,
+    validate_original_command,
+    validate_repo_name,
+)
+
+_MARKER = "__ORION_HANDOFF_JSON__="
+_MAX_STDIN = 64_000
+
+
+def _emit(payload: dict) -> None:
+    safe = {
+        "ok": bool(payload.get("ok")),
+        "error": redact(str(payload.get("error") or ""))[:500],
+        "summary": redact(str(payload.get("summary") or ""))[:1000],
+        "pr_url": str(payload.get("pr_url") or ""),
+        "commit_sha": str(payload.get("commit_sha") or ""),
+        "branch": str(payload.get("branch") or ""),
+    }
+    sys.stdout.write(_MARKER + json.dumps(safe) + "\n")
+
+
+def _fail(message: str, code: int) -> int:
+    _emit({"ok": False, "error": message})
+    return code
+
+
+def _config_path() -> Path:
+    override = os.environ.get("ORION_HANDOFF_CONFIG", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return _HERE / "mac_sandbox.yaml"
+
+
+def _read_secret(path: Path) -> str:
+    if not path.is_file():
+        raise PolicyError(f"missing secret file {path.name}")
+    mode = path.stat().st_mode
+    if not secret_file_mode_ok(mode):
+        raise PolicyError(f"{path.name} is readable by group or others")
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise PolicyError(f"empty secret file {path.name}")
+    return text
+
+
+def _git(args: list[str], cwd: Path, env: dict[str, str], timeout: int = 120) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def _git_env(key_path: Path | None) -> dict[str, str]:
+    env = {
+        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin",
+        "HOME": str(Path.home()),
+        "LANG": "C.UTF-8",
+        "GIT_AUTHOR_NAME": "cursor-worker",
+        "GIT_AUTHOR_EMAIL": "cursor-worker@localhost",
+        "GIT_COMMITTER_NAME": "cursor-worker",
+        "GIT_COMMITTER_EMAIL": "cursor-worker@localhost",
+    }
+    if key_path is not None:
+        env["GIT_SSH_COMMAND"] = (
+            "ssh -i "
+            + str(key_path)
+            + " -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+        )
+    return env
+
+
+def _prepare_clone(dest: Path, url: str, branch: str, env: dict[str, str]) -> None:
+    dest = assert_outside_origin(dest)
+    if dest.exists() and not (dest / ".git").is_dir():
+        raise PolicyError("clone path exists and is not a git checkout")
+    if not dest.exists():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        proc = subprocess.run(
+            ["git", "clone", "--branch", "main", "--single-branch", url, str(dest)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise PolicyError("git clone failed")
+    fetch = _git(["fetch", "origin", "main"], dest, env, timeout=180)
+    if fetch.returncode != 0:
+        raise PolicyError("git fetch origin main failed")
+    checkout = _git(["checkout", "-B", branch, "origin/main"], dest, env)
+    if checkout.returncode != 0:
+        raise PolicyError("could not check out the incident branch")
+    current = _git(["branch", "--show-current"], dest, env)
+    if current.stdout.strip() != branch:
+        raise PolicyError("checkout is not the incident branch")
+
+
+def _policy_reset(dest: Path, env: dict[str, str]) -> None:
+    _git(["reset", "--hard", "origin/main"], dest, env)
+    _git(["clean", "-fd"], dest, env)
+
+
+def _run_agent(
+    *,
+    profile: Path,
+    clone: Path,
+    agent_bin: Path,
+    api_key: str,
+    worker_home: Path,
+    operator_home: Path,
+    secret_ssh: Path,
+    secret_config: Path,
+    brief: str,
+    timeout: int,
+) -> str:
+    """Run cursor-agent inside the seatbelt. Return redacted combined output."""
+    with tempfile.TemporaryDirectory(prefix="orion-handoff-") as tmp_name:
+        tmp = assert_outside_origin(Path(tmp_name))
+        home = tmp / "home"
+        home.mkdir()
+        env = agent_environment(api_key, home, tmp, agent_bin)
+        cmd = [
+            "sandbox-exec",
+            "-D",
+            f"OPERATOR_HOME={operator_home.resolve()}",
+            "-D",
+            f"WORKER_HOME={worker_home.resolve()}",
+            "-D",
+            f"CLONE={clone.resolve()}",
+            "-D",
+            f"TMP={tmp.resolve()}",
+            "-D",
+            f"AGENT_ROOT={agent_bin.parent.resolve()}",
+            "-D",
+            f"SECRET_SSH={secret_ssh.resolve()}",
+            "-D",
+            f"SECRET_CONFIG={secret_config.resolve()}",
+            "-f",
+            str(profile),
+            "--",
+            str(agent_bin),
+            "-p",
+            "--output-format",
+            "text",
+            "--workspace",
+            str(clone),
+            brief,
+        ]
+        if "--trust" in cmd or "--force" in cmd:
+            raise PolicyError("refusing to launch cursor-agent with trust or force")
+        proc = subprocess.run(
+            cmd,
+            cwd=str(clone),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    return redact(((proc.stdout or "") + "\n" + (proc.stderr or "")).strip())[:2000]
+
+
+def _open_pr(dest: Path, branch: str, title: str, token: str | None) -> str:
+    if not token:
+        return ""
+    env = _git_env(None)
+    env["GH_TOKEN"] = token
+    env["PATH"] = "/opt/homebrew/bin:/usr/bin:/bin"
+    proc = subprocess.run(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--base",
+            "main",
+            "--head",
+            branch,
+            "--title",
+            title[:72],
+            "--body",
+            "Sandboxed Cursor handoff. Review before merge. The agent did not have production credentials.",
+        ],
+        cwd=str(dest),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if proc.returncode != 0:
+        view = subprocess.run(
+            ["gh", "pr", "view", branch, "--json", "url", "-q", ".url"],
+            cwd=str(dest),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        return (view.stdout or "").strip()
+    return (proc.stdout or "").strip().splitlines()[-1] if proc.stdout else ""
+
+
+def run_request(command: str, raw_stdin: str, cfg: dict) -> dict:
+    """Validate, clone, sandbox the agent, and push a non-main branch."""
+    if not cfg.get("enabled"):
+        raise PolicyError("handoff disabled")
+    allow = {validate_repo_name(str(name)) for name in (cfg.get("allow_repos") or [])}
+    repo = validate_original_command(command, allow)
+    try:
+        payload = json.loads(raw_stdin)
+    except json.JSONDecodeError as exc:
+        raise PolicyError("stdin is not json") from exc
+    if not isinstance(payload, dict):
+        raise PolicyError("stdin json must be an object")
+    if str(payload.get("repo") or "") != repo:
+        raise PolicyError("stdin repo does not match the command")
+    fingerprint = str(payload.get("fingerprint") or "")
+    branch = branch_for(fingerprint)
+    assert_push_branch(branch)
+    brief = str(payload.get("brief") or "")
+    if not brief.strip():
+        raise PolicyError("empty brief")
+    if scan_text(brief):
+        raise PolicyError("brief contains secret-shaped text")
+
+    denied_home = configure_denied_home(Path(str(cfg.get("denied_home") or "")))
+    worker_home_cfg = str(cfg.get("worker_home") or "").strip()
+    if not worker_home_cfg:
+        raise PolicyError("worker_home is not set")
+    worker_home = assert_outside_origin(Path(worker_home_cfg))
+    clone_root = assert_outside_origin(Path(str(cfg.get("clone_root") or worker_home / "clones")))
+    dest = assert_outside_origin(clone_root / repo)
+    if clone_root not in dest.parents:
+        raise PolicyError("clone path escaped clone_root")
+
+    urls = cfg.get("git_urls") or {}
+    if not isinstance(urls, dict):
+        raise PolicyError("git_urls must be a map")
+    url = validate_git_url(str(urls.get(repo) or ""))
+
+    key_path = Path(str(cfg.get("git_ssh_key") or "")).expanduser()
+    git_env = _git_env(key_path if str(cfg.get("git_ssh_key") or "") else None)
+    _prepare_clone(dest, url, branch, git_env)
+
+    api_key_path = assert_outside_origin(Path(str(cfg["cursor_api_key_file"])).expanduser())
+    api_key = _read_secret(api_key_path)
+    agent_bin_cfg = str(cfg.get("cursor_agent_bin") or "").strip()
+    if not agent_bin_cfg:
+        raise PolicyError("cursor_agent_bin is not set")
+    agent_bin = assert_outside_origin(Path(agent_bin_cfg).expanduser())
+    if not agent_bin.is_file() or not os.access(agent_bin, os.X_OK):
+        raise PolicyError("cursor-agent is not executable")
+
+    profile = Path(str(cfg.get("seatbelt_profile") or _HERE / "cursor-worker.sb")).expanduser()
+    if not profile.is_file():
+        raise PolicyError("seatbelt profile is missing")
+    secret_ssh = assert_outside_origin(key_path.parent if str(cfg.get("git_ssh_key") or "") else worker_home / ".ssh")
+    secret_config = assert_outside_origin(api_key_path.parent)
+
+    summary = _run_agent(
+        profile=profile,
+        clone=dest,
+        agent_bin=agent_bin,
+        api_key=api_key,
+        worker_home=worker_home,
+        operator_home=denied_home,
+        secret_ssh=secret_ssh,
+        secret_config=secret_config,
+        brief=brief,
+        timeout=1800,
+    )
+
+    current = _git(["branch", "--show-current"], dest, git_env).stdout.strip()
+    if current != branch:
+        _policy_reset(dest, git_env)
+        raise PolicyError("agent left the incident branch")
+    assert_push_branch(current)
+
+    add = _git(["add", "-A"], dest, git_env)
+    if add.returncode != 0:
+        raise PolicyError("git add failed")
+    names = [
+        line.strip()
+        for line in _git(["diff", "--cached", "--name-only"], dest, git_env).stdout.splitlines()
+        if line.strip()
+    ]
+    if not names:
+        return {
+            "ok": False,
+            "error": "agent made no changes",
+            "summary": summary,
+            "branch": branch,
+        }
+    numstat = _git(["diff", "--cached", "--numstat"], dest, git_env).stdout
+    diff_text = _git(["diff", "--cached"], dest, git_env).stdout
+    reasons = check_paths(names) + check_diff_size(*diff_totals(numstat)) + scan_text(diff_text)
+    if reasons:
+        _policy_reset(dest, git_env)
+        raise PolicyError("diff rejected by policy")
+
+    title = f"Fix production incident {fingerprint[:8]}"
+    commit = _git(["commit", "-m", title], dest, git_env)
+    if commit.returncode != 0:
+        _policy_reset(dest, git_env)
+        raise PolicyError("git commit failed")
+    sha = _git(["rev-parse", "HEAD"], dest, git_env).stdout.strip()
+    assert_push_branch(branch)
+    push = _git(["push", "-u", "origin", branch], dest, git_env, timeout=180)
+    if push.returncode != 0:
+        raise PolicyError("git push failed")
+
+    token = None
+    token_path = str(cfg.get("gh_token_file") or "").strip()
+    if token_path:
+        token_file = Path(token_path).expanduser()
+        if token_file.is_file():
+            token = _read_secret(assert_outside_origin(token_file))
+    pr_url = _open_pr(dest, branch, title, token)
+    return {
+        "ok": True,
+        "summary": summary or title,
+        "pr_url": pr_url,
+        "commit_sha": sha,
+        "branch": branch,
+    }
+
+
+def main() -> int:
+    command = os.environ.get("SSH_ORIGINAL_COMMAND", "").strip()
+    if not command:
+        command = " ".join(sys.argv[1:]).strip()
+        if command and not command.startswith("orion-mac-handoff"):
+            command = "orion-mac-handoff " + command
+    try:
+        raw = sys.stdin.read(_MAX_STDIN + 1)
+    except Exception as exc:
+        return _fail(f"could not read stdin: {exc}", 2)
+    if len(raw) > _MAX_STDIN:
+        return _fail("stdin is too large", 2)
+    cfg_path = _config_path()
+    if not cfg_path.is_file():
+        return _fail("handoff config is missing", 2)
+    try:
+        cfg = parse_handoff_config(cfg_path.read_text(encoding="utf-8"))
+        result = run_request(command, raw, cfg)
+    except PolicyError as exc:
+        return _fail(str(exc), 3)
+    except subprocess.TimeoutExpired:
+        return _fail("handoff timed out", 4)
+    except Exception:
+        return _fail("handoff failed", 4)
+    _emit(result)
+    return 0 if result.get("ok") else 4
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,38 @@
+# Mac handoff for allowlisted code incidents.
+#
+# Copy to $ORION_OVERLAY_ROOT/config/mac_sandbox.yaml and set enabled: true
+# only after scripts/setup-cursor-worker.sh has created the worker user.
+# The public default stays off. ssh_host and identity_file belong in the
+# overlay copy, not in this file.
+#
+# OpenClaw SSHs as cursor-worker. sshd ForceCommand is the only command
+# that key can run. The Cursor API key, git key, and GitHub token stay in
+# cursor-worker's home and are denied to the agent by config/cursor-worker.sb.
+
+enabled: false
+
+ssh_host: ""
+ssh_user: cursor-worker
+identity_file: ""
+
+# Operator home the seatbelt denies. setup-cursor-worker.sh replaces
+# /Users/YOU with the sudo user's home in the installed copy.
+denied_home: /Users/YOU
+
+worker_home: /Users/cursor-worker
+clone_root: /Users/cursor-worker/clones
+cursor_agent_bin: ""
+cursor_api_key_file: /Users/cursor-worker/.config/orion-handoff/cursor-api-key
+gh_token_file: /Users/cursor-worker/.config/orion-handoff/gh-token
+git_ssh_key: /Users/cursor-worker/.ssh/id_ed25519
+seatbelt_profile: /Users/cursor-worker/orion-handoff/cursor-worker.sb
+
+allow_repos:
+  - CIS-NET-AUTOMATION
+  - DATABASE-INSERT
+  - CWR-INTERFACE
+
+git_urls:
+  CIS-NET-AUTOMATION: git@github.com:max1millions/CIS-NET-AUTOMATION.git
+  DATABASE-INSERT: git@github.com:max1millions/rightstune-database-insert.git
+  CWR-INTERFACE: git@github.com:max1millions/CWR-INTERFACE.git

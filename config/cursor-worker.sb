@@ -1,0 +1,38 @@
+(version 1)
+(allow default)
+
+;; Operator home from denied_home. The clone, the agent install, and the
+;; worker home must live somewhere else. Paths passed with -D are resolved
+;; by the wrapper so a /var -> /private/var symlink cannot step around the deny.
+(deny file-read* file-write*
+    (subpath (param "OPERATOR_HOME"))
+)
+
+;; The worker home holds the git key and the GitHub token. Re-allow only
+;; the clone, the empty temp home, and the agent install, then deny the
+;; secret directories again so they stay closed even if they sit inside
+;; an allowed tree.
+(deny file-read* file-write*
+    (subpath (param "WORKER_HOME"))
+)
+(allow file-read* file-write*
+    (subpath (param "CLONE"))
+    (subpath (param "TMP"))
+)
+(allow file-read*
+    (subpath (param "AGENT_ROOT"))
+)
+(deny file-read* file-write*
+    (subpath (param "SECRET_SSH"))
+    (subpath (param "SECRET_CONFIG"))
+)
+
+;; sandbox-exec on this macOS rejects every network host except "*" and
+;; "localhost", so a Cursor-only hostname filter will not load. Outbound
+;; is HTTPS and DNS. SSH, MySQL, and Tailscale ports stay denied.
+(deny network-outbound)
+(allow network-outbound
+    (remote udp "*:53")
+    (remote tcp "*:53")
+    (remote tcp "*:443")
+)
